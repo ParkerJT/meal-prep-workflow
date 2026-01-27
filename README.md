@@ -1,6 +1,6 @@
 # Meal Prepper - Agentic Recipe Converter
 
-An agentic workflow that extracts recipes from web pages or YouTube videos and converts them into meal-prep-friendly formats based on user-specified nutritional and portion requirements.
+An agentic workflow that extracts recipes from web pages or YouTube videos and converts them into meal-prep-friendly formats based on user-specified nutritional and portion requirements!
 
 ## Overview
 
