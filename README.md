@@ -6,11 +6,12 @@ An agentic workflow that extracts recipes from web pages or YouTube videos and c
 
 This application provides an end-to-end solution for converting recipes into customized meal prep formats. Users can input a recipe URL (web page or YouTube video) along with their desired adjustments (portion quantity, target calories, target protein), and the system will:
 
-1. **Extract** the recipe from the source using an extraction agent
-2. **Convert** the recipe to meet user input requirements using a conversion agent
-3. **Display** the adjusted recipe in a structured format
-4. **Save** the recipe to a database with a unique ID for later retrieval
-5. **Export** the recipe in various formats (PDF, email, text)
+1. **Scout** the recipe source using a scout agent (watches YouTube videos or parses web pages)
+2. **Extract** the recipe from the prepped content using an extraction agent
+3. **Convert** the recipe to meet user input requirements using a conversion agent
+4. **Display** the adjusted recipe in a structured format
+5. **Save** the recipe to a database with a unique ID for later retrieval
+6. **Export** the recipe in various formats (PDF, email, text)
 
 ## Architecture
 
@@ -18,6 +19,10 @@ This application provides an end-to-end solution for converting recipes into cus
 
 ```
 User Input (Recipe URL + Adjustments)
+    ↓
+[Scout Agent] → Prepped Content
+    ├─ YouTube: Gemini 2.5 Pro watches video
+    └─ Web Page: Firecrawl API parses HTML
     ↓
 [Extraction Agent] → Structured Recipe Format
     ↓
@@ -32,16 +37,27 @@ Next.js Frontend → Display & Export Options
 
 ### Agent Workflow
 
-#### 1. Extraction Agent
+#### 1. Scout Agent
 - **Input**: Recipe URL (web page or YouTube video)
 - **Process**: 
-  - Fetches content from the source
-  - Extracts recipe information (ingredients, instructions, nutritional data)
+  - **For YouTube videos**: Uses Gemini 2.5 Pro to watch the video and extract recipe-relevant content
+  - **For web pages**: Uses Firecrawl API to parse and clean HTML content
+  - Prepares and structures the raw content for the extraction agent
+- **Output**: Prepped content (cleaned text/transcript) ready for extraction
+- **Success Criteria**: Content successfully retrieved and prepped from source
+
+#### 2. Extraction Agent
+- **Input**: Recipe URL (web page or YouTube video)
+- **Process**: 
+  - **Scout phase**: Prepares content from source
+    - **For YouTube videos**: Uses Gemini 2.5 Pro to watch the video and extract recipe-relevant content
+    - **For web pages**: Uses Firecrawl API to parse and clean HTML content
+  - **Extraction phase**: Extracts recipe information (ingredients, instructions) from the prepped content
   - Structures the data into a standardized format
-- **Output**: Structured recipe data (Pydantic model)
+- **Output**: Structured recipe data (Pydantic model) with ingredients and instructions
 - **Success Criteria**: Recipe successfully extracted with all required fields
 
-#### 2. Conversion Agent
+#### 3. Conversion Agent
 - **Input**: 
   - Structured recipe from Extraction Agent
   - User adjustments:
@@ -49,11 +65,12 @@ Next.js Frontend → Display & Export Options
     - Target calories
     - Target protein
 - **Process**:
+  - Calculates calories and protein per serving based on ingredients
   - Scales ingredients based on portion requirements
   - Adjusts recipe to meet target calories and protein
-  - Recalculates nutritional information
+  - Recalculates nutritional information for adjusted recipe
   - Maintains recipe structure and instructions
-- **Output**: Adjusted recipe in structured Pydantic format
+- **Output**: Adjusted recipe in structured Pydantic format with calculated nutritional info
 - **Success Criteria**: Recipe meets user-specified nutritional targets
 
 ### API Structure
@@ -80,8 +97,9 @@ Next.js Frontend → Display & Export Options
 
 The system uses Pydantic models to ensure type safety and validation:
 
-- **Recipe Model**: Core recipe structure with ingredients, instructions, nutritional info
-- **Conversion Request**: User inputs (portion quantity, target calories, target protein)
+- **Original Recipe Model**: Core recipe structure with ingredients and instructions (no nutritional info)
+- **Converted Recipe Model**: Adjusted recipe with calculated nutritional information (calories and protein per serving)
+- **Conversion Request**: Original recipe + user adjustments (portion quantity, target calories, target protein)
 - **Recipe Response**: Final structured output for frontend display
 
 ## Technologies
@@ -89,14 +107,18 @@ The system uses Pydantic models to ensure type safety and validation:
 ### Backend
 - **Framework**: FastAPI (Python)
 - **AI/ML**: 
-  - OpenAI API (GPT models for agent reasoning)
-  - OpenAI Agents SDK for agent orchestration
+  - **Gemini 2.5 Pro** (Google) - Scout agent for YouTube video analysis
+  - **OpenAI API** (GPT models) - Extraction and conversion agent reasoning
+  - **OpenAI Agents SDK** - Agent workflow orchestration
+  - **Firecrawl API** - Web page parsing and content extraction
 - **Database**: Azure Cosmos DB (NoSQL document database)
 - **Deployment**: Azure Container Apps
 - **Dependencies**:
   - `pydantic` - Data validation and serialization
   - `openai` - OpenAI API client
   - `openai-agents` - Agent workflow orchestration
+  - `google-generativeai` - Gemini API client
+  - `firecrawl-py` - Firecrawl API client
   - `python-dotenv` - Environment variable management
   - `uvicorn` - ASGI server
 
@@ -140,17 +162,9 @@ This design allows users to:
 ```json
 {
   "id": "unique-recipe-id",
+  "created_at": "timestamp",
   "recipe": {
-    // Structured Pydantic recipe model
-  },
-  "metadata": {
-    "created_at": "timestamp",
-    "source_url": "original-recipe-url",
-    "user_adjustments": {
-      "portion_quantity": number,
-      "target_calories": number,
-      "target_protein": number
-    }
+    // ConvertedRecipe Pydantic model (includes nutritional info and conversion metadata)
   }
 }
 ```
@@ -170,6 +184,8 @@ pip install -r requirements.txt
 ACCESS_TOKEN=your-access-token
 OPENAI_API_KEY=your-openai-api-key
 OPENAI_MODEL=gpt-4o-mini
+GEMINI_API_KEY=your-gemini-api-key
+FIRECRAWL_API_KEY=your-firecrawl-api-key
 COSMOS_DB_CONNECTION_STRING=your-cosmos-db-connection-string
 COSMOS_DB_NAME=your-database-name
 COSMOS_DB_CONTAINER=your-container-name
@@ -208,14 +224,22 @@ npm run dev
 ## Future Development Roadmap
 
 ### Core Features to Implement
-1. **Extraction Agent**:
-   - Web page scraping and parsing
-   - YouTube video transcript extraction
-   - Recipe structure detection and normalization
+1. **Scout Agent**:
+   - YouTube video watching with Gemini 2.5 Pro
+   - Web page parsing with Firecrawl API
+   - Content preparation and cleaning for extraction
 
-2. **Conversion Agent**:
+2. **Extraction Agent**:
+   - Scout functionality: YouTube video watching with Gemini 2.5 Pro and web page parsing with Firecrawl API
+   - Content preparation and cleaning
+   - Recipe structure detection and normalization from prepped content
+   - Ingredient and instruction extraction
+   - Structured data validation
+
+3. **Conversion Agent**:
+   - Nutritional calculation from ingredients (calories and protein per serving)
    - Ingredient scaling algorithms
-   - Nutritional calculation and adjustment
+   - Recipe adjustment to meet target nutritional goals
    - Recipe optimization for meal prep
 
 3. **Frontend Features**:
@@ -253,9 +277,9 @@ meal-prep-workflow/
 │   │   └── services/
 │   │       └── agents/
 │   │           ├── models.py    # Pydantic models
-│   │           ├── extraction.py # Extraction agent (to be created)
-│   │           ├── conversion.py # Conversion agent (to be created)
-│   │           └── workflow.py  # Agent orchestration (to be created)
+│   │           ├── extraction.py # Extraction agent (includes scout functionality for YouTube/Web content prep)
+│   │           ├── conversion.py # Conversion agent
+│   │           └── workflow.py  # Agent orchestration
 │   ├── Dockerfile
 │   └── requirements.txt
 ├── frontend/
@@ -265,8 +289,9 @@ meal-prep-workflow/
 
 ## Notes
 
-- The workflow is designed to be resilient: if extraction fails, conversion is not attempted
+- The workflow is designed to be resilient: if any agent fails, subsequent agents are not attempted
 - All recipe data is validated using Pydantic models before processing
 - The unique recipe ID allows for easy sharing without authentication
 - Access token protects the computationally expensive agent workflows
+- Extraction agent includes scout functionality: uses Gemini 2.5 Pro for YouTube videos (multimodal capabilities) and Firecrawl for web pages (reliable HTML parsing)
 
