@@ -7,6 +7,6 @@ settings = Settings()
 
 def run_workflow(user_request: UserRequest) -> OriginalRecipe:
 
-    original_recipe = recipe_extraction_workflow()
+    original_recipe = recipe_extraction_workflow(UserRequest.recipe_url)
 
     return original_recipe

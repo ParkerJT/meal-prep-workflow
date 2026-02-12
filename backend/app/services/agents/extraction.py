@@ -7,6 +7,8 @@ import json
 import re
 from openai import OpenAI
 import yt_dlp
+from trafilatura import extract, html2txt, baseline
+from trafilatura.downloads import fetch_response
 
 settings = Settings()
 
@@ -272,16 +274,58 @@ Ensure accuracy and completeness - extract every ingredient and every step from 
 
   return response.choices[0].message.parsed
 
-def recipe_extraction_workflow() -> OriginalRecipe:
+def scrape_web_page(url: str) -> str:
+  """
+  Scrapes a web page and returns the text content using trafilatura.
+  """
+  response = fetch_response(url, decode=True)
+  
+  if response is None:
+    raise ValueError(f"Failed to download the web page from {url} (e.g. blocked, invalid URL, etc.)")
+  
+  if response.status != 200:
+    raise ValueError(f"HTTP {response.status} error while downloading the web page from {url}")
+  
+  # Primary extraction attempt
+  html = response.html
+  content = extract(html, output_format="txt", favor_recall=True)
+
+  # Fallback 1: Less filtered extraction
+  if not content or len(content.strip()) < 100:
+    content = html2txt(html)
+    print("Fallback 1: Less filtered extraction")
+  
+  if not content or len(content.strip()) < 100:
+    _, content, _ = baseline(html)
+    print("Fallback 2: Baseline extraction")
+
+  if not content or len(content.strip()) < 20:
+    print("Fallback 3: No extractable content")
+    raise ValueError("Page contains no extractable content")
+  
+  return content
+
+def extract_recipe_from_web_page(content: str, openai_client: OpenAI) -> OriginalRecipe:
+  """
+  Extracts a recipe from the scraped web page content
+  """
+
+  return
+
+def recipe_extraction_workflow(url: str) -> OriginalRecipe:
   """
   Workflow for extracting a recipe from either a web page or a YouTube video
   """
 
   client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
-  # Testing
-  url = "https://www.youtube.com/shorts/PrrM3QHPtsQ"
-  video_info = scrape_youtube_video(url)
-  recipe = extract_recipe_from_youtube_video(video_info['title'], video_info['description'], video_info['transcript'], client)
+  if url.startswith("https://www.youtube.com") or url.startswith("https://youtu.be"):
+    video_info = scrape_youtube_video(url)
+    recipe = extract_recipe_from_youtube_video(video_info['title'], video_info['description'], video_info['transcript'], client)
+  elif url.startswith("https://"):
+    content = scrape_web_page(url)
+    recipe = extract_recipe_from_web_page(content, client)
+  else:
+    raise ValueError(f"Invalid  or unsupported URL: {url}")
 
   return recipe

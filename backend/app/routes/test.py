@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 from app.services.agents.models import UserRequest, UserAdjustments
 from app.services.agents.workflow import run_workflow
+from app.services.agents.extraction import scrape_web_page
 
 router = APIRouter(prefix="/api/test", tags=["test"])
 
@@ -33,3 +34,20 @@ async def test_workflow():
             "message": str(e)
         }
 
+@router.post("/scrape")
+async def test_scrape(url: str):
+    """
+    Test endpoint for the scrape_web_page function.
+    Accepts a URL and returns the scraped text content.
+    """
+    try:
+        content = scrape_web_page(url)
+        return {
+            "status": "success",
+            "result": content
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e)
+        }
