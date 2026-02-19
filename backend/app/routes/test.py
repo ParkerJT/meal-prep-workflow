@@ -6,19 +6,18 @@ from app.services.agents.extraction import scrape_web_page
 router = APIRouter(prefix="/api/test", tags=["test"])
 
 @router.post("/workflow")
-async def test_workflow():
+async def test_workflow(recipe_url: str, target_servings: int, target_calories: int, target_protein: int):
     """
     Test endpoint for the run_workflow function.
     Accepts a UserRequest and returns the extracted OriginalRecipe.
     """
 
-    # IGNORE FOR NOW
     user_request = UserRequest(
-        recipe_url="https://www.youtube.com/watch?v=CfchYxh7Q9g",
+        recipe_url=recipe_url,
         user_adjustments=UserAdjustments(
-            target_servings=1,
-            target_calories=100,
-            target_protein=10
+            target_servings=target_servings,
+            target_calories=target_calories,
+            target_protein=target_protein
         )
     )
 
@@ -27,24 +26,6 @@ async def test_workflow():
         return {
             "status": "success",
             "result": original_recipe
-        }
-    except Exception as e:
-        return {
-            "status": "error",
-            "message": str(e)
-        }
-
-@router.post("/scrape")
-async def test_scrape(url: str):
-    """
-    Test endpoint for the scrape_web_page function.
-    Accepts a URL and returns the scraped text content.
-    """
-    try:
-        content = scrape_web_page(url)
-        return {
-            "status": "success",
-            "result": content
         }
     except Exception as e:
         return {

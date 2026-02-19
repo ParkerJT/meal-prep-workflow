@@ -1,5 +1,4 @@
 from pydantic import BaseModel
-from datetime import datetime
 
 # User adjustments packaged
 class UserAdjustments(BaseModel):
@@ -50,9 +49,3 @@ class ConvertedRecipe(BaseModel):
     instructions: list[str] # List of instructions
     nutritional_info: NutritionalInfo # Nutritional information
     conversion_metadata: ConversionMetadata
-
-
-class DatabaseRecord(BaseModel):
-    id: str # Unique recipe ID
-    created_at: datetime # Timestamp of creation
-    recipe: ConvertedRecipe

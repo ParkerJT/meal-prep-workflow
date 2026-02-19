@@ -1,14 +1,11 @@
-from fastapi import APIRouter, Depends
-from app.dependencies import get_access_token
+from fastapi import APIRouter
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 @router.post("/validate")
-async def validate_token(
-    access_token: str = Depends(get_access_token)
-):
+async def validate_token():
     """
-    Validate access token from the x-access-token header.
-    This endpoint exists for frontend to check token validity.
+    Validate token. Placeholder until Phase 1 (Firebase Auth).
+    Frontend can call this to check auth status.
     """
-    return {"status": "success", "message": "Access token validated"}
+    return {"status": "success", "message": "Auth placeholder - Firebase auth in Phase 1"}
