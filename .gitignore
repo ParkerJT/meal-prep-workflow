@@ -15,6 +15,9 @@ backend/.env
 .env
 .env.local
 
+# Backend Secrets
+backend/.secrets/
+
 # IDE
 .vscode/
 .idea/

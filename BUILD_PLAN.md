@@ -68,24 +68,24 @@ A phased build plan for deploying the meal prep recipe platform as a micro SaaS 
 
 ### 1.1 Firebase Project Setup
 
-- [ ] Create Firebase project (do this twice: `meal-prep-staging`, `meal-prep-production`).
-- [ ] Enable Authentication: Email/Password, Google.
-- [ ] Enable Firestore (start in test mode; we'll add rules in Phase 2).
-- [ ] Create a Web App in Firebase Console; note config (apiKey, projectId, etc.).
-- [ ] Generate service account key for backend (Project Settings → Service Accounts → Generate new private key).
-- [ ] Store service account JSON in Secret Manager (or env var for local dev).
+- [x] Create Firebase project (do this twice: `meal-prep-staging`, `meal-prep-production`).
+- [x] Enable Authentication: Email/Password, Google.
+- [x] Enable Firestore (start in test mode; we'll add rules in Phase 2).
+- [x] Create a Web App in Firebase Console; note config (apiKey, projectId, etc.).
+- [x] Generate service account key for backend (Project Settings → Service Accounts → Generate new private key).
+- [x] Store service account JSON in Secret Manager (or env var for local dev).
 
 ### 1.2 Backend: Firebase Auth Verification
 
-- [ ] Add `firebase-admin` to backend dependencies.
-- [ ] Initialize Firebase Admin in FastAPI startup (load credentials from env/Secret Manager).
+- [x] Add `firebase-admin` to backend dependencies.
+- [x] Initialize Firebase Admin in FastAPI startup (load credentials from env/Secret Manager).
 - [ ] Create dependency `get_current_user` that:
   - Reads `Authorization: Bearer <token>` header.
   - Verifies token with `auth.verify_id_token()`.
   - Returns `uid` (and optionally user record).
 - [ ] Add optional dependency `get_current_user_optional` for endpoints that work for both authenticated and anonymous users.
-- [ ] Replace or remove existing `ACCESS_TOKEN` auth in `app/dependencies.py`.
-- [ ] Update `app/config.py`: remove Cosmos DB vars; add Firebase project ID, path to service account (or Secret Manager ref).
+- [x] Replace or remove existing `ACCESS_TOKEN` auth in `app/dependencies.py`.
+- [x] Update `app/config.py`: remove Cosmos DB vars; add Firebase project ID, path to service account (or Secret Manager ref).
 
 ### 1.3 Frontend: Next.js Scaffold
 
