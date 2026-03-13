@@ -1,11 +1,12 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from app.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 @router.post("/validate")
-async def validate_token():
+async def validate_token(current_user: dict = Depends(get_current_user)):
     """
-    Validate token. Placeholder until Phase 1 (Firebase Auth).
-    Frontend can call this to check auth status.
+    Validate Firebase auth token. Frontend can call this to check auth status.
     """
-    return {"status": "success", "message": "Auth placeholder - Firebase auth in Phase 1"}
+
+    return {"status": "success", "message": "Auth successful", "user": current_user}

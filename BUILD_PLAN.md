@@ -79,11 +79,11 @@ A phased build plan for deploying the meal prep recipe platform as a micro SaaS 
 
 - [x] Add `firebase-admin` to backend dependencies.
 - [x] Initialize Firebase Admin in FastAPI startup (load credentials from env/Secret Manager).
-- [ ] Create dependency `get_current_user` that:
+- [x] Create dependency `get_current_user` that:
   - Reads `Authorization: Bearer <token>` header.
   - Verifies token with `auth.verify_id_token()`.
   - Returns `uid` (and optionally user record).
-- [ ] Add optional dependency `get_current_user_optional` for endpoints that work for both authenticated and anonymous users.
+- [x] Add optional dependency `get_current_user_optional` for endpoints that work for both authenticated and anonymous users.
 - [x] Replace or remove existing `ACCESS_TOKEN` auth in `app/dependencies.py`.
 - [x] Update `app/config.py`: remove Cosmos DB vars; add Firebase project ID, path to service account (or Secret Manager ref).
 
