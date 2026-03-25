@@ -18,3 +18,6 @@ class Settings:
 
     # Firebase Service Account
     FIREBASE_SERVICE_ACCOUNT: str = os.getenv("FIREBASE_SERVICE_ACCOUNT", "")
+
+    # CORS Allowed Origins
+    CORS_ALLOWED_ORIGINS: list[str] = os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")

@@ -26,14 +26,14 @@ A phased build plan for deploying the meal prep recipe platform as a micro SaaS 
 
 | User Type | Access |
 |-----------|--------|
-| **Free** | Sign up for free. Browse public recipe database. Save recipes to personal collection. No AI workflow. |
+| **Free** | Sign up for free. Browse **published** recipes from other users. Save copies to personal collection. No AI workflow. |
 | **Trial** | 14-day free trial of AI recipe workflow (extract from URLs + convert to meal prep parameters). |
-| **Subscriber** | Full access: AI workflow + recipe database + personal collection. Monthly or annual billing. |
+| **Subscriber** | Full access: AI workflow + browse/save **published** recipes + personal collection. Monthly or annual billing. |
 
 ### Core Features
 
 - **AI Recipe Workflow**: Extract structured recipes from web URLs and YouTube videos, then convert to user's meal prep parameters (servings, calories per portion, protein per portion). Full workflow completed in Phase 2.5.
-- **Recipe Database**: Shared, deduplicated recipe collection. All users can browse.
+- **Published recipes**: Users can publish saved recipes (converted snapshot) for others to browse. Browsing is via the published-recipes API, not the internal canonical store.
 - **Personal Collection**: Users save recipes to their collection. User-specific notes per recipe.
 - **Dashboard**: Logged-in users view their saved recipes and notes.
 
@@ -89,18 +89,18 @@ A phased build plan for deploying the meal prep recipe platform as a micro SaaS 
 
 ### 1.3 Frontend: Next.js Scaffold
 
-- [ ] Create Next.js app (App Router) in project root or `frontend/` directory.
-- [ ] Add Firebase SDK: `firebase`, `firebase/auth`.
-- [ ] Create Firebase config module (use env vars for apiKey, projectId, etc.).
-- [ ] Create Auth context/provider: sign in, sign out, `onAuthStateChanged`, token refresh.
-- [ ] Build minimal UI: Sign Up, Sign In, Sign Out.
-- [ ] Ensure frontend sends `Authorization: Bearer <idToken>` on API calls (create API client utility).
+- [x] Create Next.js app (App Router) in project root or `frontend/` directory.
+- [x] Add Firebase SDK: `firebase`, `firebase/auth`.
+- [x] Create Firebase config module (use env vars for apiKey, projectId, etc.).
+- [x] Create Auth context/provider: sign in, sign out, `onAuthStateChanged`, token refresh.
+- [x] Build minimal UI: Sign Up, Sign In, Sign Out.
+- [x] Ensure frontend sends `Authorization: Bearer <idToken>` on API calls (create API client utility).
 
 ### 1.4 CORS & API Client
 
-- [ ] Configure FastAPI CORS with frontend origin (e.g. `http://localhost:3000` for dev).
-- [ ] Create frontend API client that attaches Firebase ID token to requests.
-- [ ] Handle 401 responses (e.g. redirect to login or trigger token refresh).
+- [x] Configure FastAPI CORS with frontend origin (e.g. `http://localhost:3000` for dev).
+- [x] Create frontend API client that attaches Firebase ID token to requests.
+- [x] Handle 401 responses (e.g. redirect to login or trigger token refresh).
 
 **Deliverable**: User can sign up, sign in, and call a protected FastAPI endpoint with a valid token.
 
@@ -108,68 +108,109 @@ A phased build plan for deploying the meal prep recipe platform as a micro SaaS 
 
 ## Phase 2: Recipe Database & Collections
 
-**Goal**: Firestore schema in place. Users can browse recipes, save to collection, add notes. Backend handles all Firestore access.
+**Goal**: Firestore schema in place. Users can browse **published** recipes from others, save copies to their collection, add personal notes, and (later) publish their own saves. Backend handles all Firestore access. The internal **`original_recipes`** store is **not** the public catalog—it exists so the AI workflow can skip re-extraction when a URL was already processed.
+
+**Scope (Phase 2 vs Phase 2.5)**: Phase 2 implements Firestore schema, security rules, and recipe/collection APIs end-to-end. You can validate flows using seeded or manually created **`original_recipes`** data. The **AI extraction + conversion pipeline** and persisting a full **`converted_recipe`** on save are **Phase 2.5**; until then, `converted_recipe` may remain null for workflow-originated saves.
 
 ### 2.1 Firestore Schema
 
-**`recipes` collection** (canonical, shared):
+**Pydantic source of truth**: Field names and nesting for persisted documents are defined in `backend/app/services/agents/models.py`. Extraction continues to use **`OriginalRecipe`** only (LLM output). The Firestore document for the canonical store uses **`OriginalRecipeDocument`** (subclass of `OriginalRecipe` with app-populated metadata). User saves use **`SavedRecipe`**.
+
+---
+
+**`original_recipes` collection** (internal; not a public catalog):
+
+Purpose: deduplicated cache of extracted **original** recipe text keyed by source URL so the workflow can skip extraction when the same normalized URL was already processed. Clients do not browse this collection; public discovery uses **published** `saved_recipes` (see below).
 
 ```
-recipes/{recipeId}
-  - id: string (hash of source_url for deduplication)
+original_recipes/{recipeId}
+  - id: string (same as document id; hash of normalized source_url for deduplication)
   - source_url: string
   - source_type: "web" | "youtube"
-  - title: string
-  - description: string | null
-  - servings: number
-  - ingredients: array
-  - instructions: array
+  - title, description, servings, ingredients, instructions — same as OriginalRecipe / OriginalRecipeDocument
   - created_at: timestamp
-  - created_by: string | null (optional, Firebase uid of first creator)
+  - created_by: string | null (optional, Firebase uid of first writer)
 ```
+
+**`OriginalRecipeDocument`** (Pydantic): extends **`OriginalRecipe`** with `id`, `source_url`, `source_type`, `created_at`, `created_by`. The repository layer maps Firestore `Timestamp` fields to/from `datetime` when validating these models.
+
+---
 
 **`users/{userId}/saved_recipes` subcollection** (user-specific):
 
 ```
 users/{userId}/saved_recipes/{savedRecipeId}
-  - recipe_id: string (reference to recipes collection)
+  - recipe_id: string (reference to original_recipes/{recipeId})
   - saved_at: timestamp
-  - notes: string (user's personal notes)
-  - converted_recipe: object | null (optional; full ConvertedRecipe when saved from AI workflow—Phase 2.5)
+  - notes: string (personal; not shown to other users when viewing a published recipe)
+  - converted_recipe: object | null — full snapshot; matches ConvertedRecipe (Phase 2.5 when workflow persists)
+  - published: boolean
+  - copied_from_user_id: string | null (set when this doc was created by copying another user's published save)
+  - copied_from_saved_recipe_id: string | null (source doc id under copied_from_user_id)
 ```
 
-**Recipe ID strategy**: Use `hashlib.sha256(normalized_source_url.encode()).hexdigest()[:32]` for deduplication. Same URL → same recipe.
+**`converted_recipe` shape**: Stored as nested maps/arrays matching the **`ConvertedRecipe`** Pydantic model. It is a **standalone** snapshot for that user (ingredients, instructions, nutrition, etc.); it is not assembled from `original_recipes` at read time. Source of truth: `ConvertedRecipe`, `NutritionalInfo`, `ConversionMetadata`, `Ingredient` in `models.py`. Condensed outline:
+
+- `title`, `description`, `servings`
+- `ingredients[]` — `name`, `quantity`, `unit`
+- `instructions[]` — strings
+- `nutritional_info` — `calories`, `protein` (per serving)
+- `conversion_metadata` — `original_recipe_url`, `conversion_notes`
+
+**`SavedRecipe`** (Pydantic): maps to the fields above (see `models.py`).
+
+---
+
+**Published recipes and copy flow**
+
+- **Public browse**: List documents where `published == true` (e.g. **collection group** query on `saved_recipes` with `published == true`, ordered by `saved_at` or similar). Requires a composite index when combined with ordering/filters.
+- **Detail URL**: Public API identifies a published recipe by **owner user id** + **`savedRecipeId`**, e.g. `GET /api/published-recipes/{ownerUserId}/{savedRecipeId}` (implementations may use an equivalent encoding).
+- **Notes**: `notes` are private to the owner. Published recipe views for other users expose **`converted_recipe`** (and metadata needed for the card/detail), not the author’s `notes`.
+- **Copy**: When a user saves someone else’s published recipe, the backend creates a **new** `saved_recipes` document for the current user with duplicated `recipe_id` and `converted_recipe`, `published=false`, empty or user-provided `notes`, and sets **`copied_from_user_id`** and **`copied_from_saved_recipe_id`** to the source. **Publishing is disabled** for such copies (enforce in API: if `copied_from_saved_recipe_id` is set, reject publish) to avoid duplicate listings of the same recipe in the published feed.
+
+---
+
+**Recipe ID strategy**: Use `hashlib.sha256(normalized_source_url.encode()).hexdigest()[:32]` for deduplication. Same normalized URL → same `recipe_id` for the **`original_recipes`** document.
+
+**Design note (deduplication)**:
+
+- **`original_recipes`**: One canonical document per normalized source URL. On save from workflow, **create** `original_recipes/{recipe_id}` if missing; otherwise **reuse** (all user saves reference the same `recipe_id`).
+- **Per-user variation** (meal prep output, notes, publish flag): lives on **`users/{userId}/saved_recipes`**, especially **`converted_recipe`**, **`notes`**, and **`published`**.
 
 ### 2.2 Firestore Security Rules
 
-- [ ] `recipes`: Read allowed for all (authenticated or not). Write only from backend (Admin SDK bypasses rules).
-- [ ] `users/{userId}/saved_recipes`: Read/write only if `request.auth.uid == userId`.
+- [ ] **`original_recipes`**: Deny client reads and writes (backend only via Admin SDK). Not intended for direct client access.
+- [ ] **`users/{userId}/saved_recipes`**: Owner read/write when `request.auth.uid == userId`. Public reads of **published** rows are typically served **only through the backend** (Admin SDK) so rules can remain owner-only; alternatively add guarded rules if you later allow limited client reads.
 
 *Note: If all Firestore access goes through the backend, rules can be restrictive; backend uses Admin SDK.*
 
 ### 2.3 Backend: Recipe & Collection APIs
 
-- [ ] **GET /api/recipes** — List recipes (paginated). Optional filters. Public or authenticated.
-- [ ] **GET /api/recipes/{recipeId}** — Get single recipe. Public.
-- [ ] **POST /api/recipes** — Create recipe (from AI extraction or manual). Called when user saves a recipe that doesn't exist yet. Auth required.
-- [ ] **GET /api/users/me/saved-recipes** — List current user's saved recipes (with notes). Auth required.
-- [ ] **POST /api/users/me/saved-recipes** — Save recipe to collection. Body: `{ recipe_id, notes? }`. Creates `saved_recipes` doc. Auth required.
-- [ ] **PATCH /api/users/me/saved-recipes/{savedRecipeId}** — Update notes. Auth required.
+- [ ] **GET /api/published-recipes** — List published saves (paginated). Public. Backed by collection group (or equivalent) on `saved_recipes` where `published == true`.
+- [ ] **GET /api/published-recipes/{ownerUserId}/{savedRecipeId}** — Single published recipe by owner uid + saved recipe doc id. Public. Returns data appropriate for non-owners (no author `notes`).
+- [ ] **POST /api/original-recipes** or internal service — Create **`original_recipes`** when saving from AI workflow if missing (not a public “catalog” write; auth + same patterns as workflow save). *Naming can match your router; prefer not to expose a generic public POST that bypasses workflow.*
+- [ ] **GET /api/users/me/saved-recipes** — List current user's saved recipes (includes `notes`, `published`, provenance fields). Auth required.
+- [ ] **POST /api/users/me/saved-recipes** — Create save. Body: `{ recipe_id, notes?, converted_recipe?, published? }` (workflow fills `converted_recipe` in Phase 2.5). For **copy-from-published**, body includes source identifiers so the backend sets `copied_from_*` and disallows `published` on create. Auth required.
+- [ ] **PATCH /api/users/me/saved-recipes/{savedRecipeId}** — Update `notes`, `converted_recipe`, and/or `published` (reject `published: true` if copy provenance forbids it). Auth required.
 - [ ] **DELETE /api/users/me/saved-recipes/{savedRecipeId}** — Remove from collection. Auth required.
 
 ### 2.4 Save Flow Logic
 
-When user "saves" a recipe (e.g. from AI extraction result):
+When user saves from the AI workflow (Phase 2.5) or creates a save:
 
 1. Compute `recipe_id` from `source_url`.
-2. Check if `recipes/{recipe_id}` exists. If not, create it.
-3. Create `users/{userId}/saved_recipes` doc with `recipe_id`, `saved_at`, `notes`.
+2. Check if `original_recipes/{recipe_id}` exists. If not, create it from extracted **`OriginalRecipe`** plus metadata into **`OriginalRecipeDocument`**.
+3. Create `users/{userId}/saved_recipes` with **`SavedRecipe`** fields: `recipe_id`, `saved_at`, `notes`, optional **`converted_recipe`**, `published` (default false), provenance null unless copying.
 
-### 2.5 Seed Data (Optional)
+When a user **copies a published recipe**:
 
-- [ ] Add script or admin endpoint to seed `recipes` with initial data for browsing (or rely on user-generated content).
+1. Create a new `saved_recipes` doc for the current user with copied `recipe_id` and **`converted_recipe`**, `published=false`, `notes` empty or user-supplied, and **`copied_from_user_id` / `copied_from_saved_recipe_id`** set. Do not allow publishing this doc.
 
-**Deliverable**: Users can browse recipes, save to collection, and add/edit notes. All via backend API.
+### 2.6 Seed Data (Optional)
+
+- [ ] Add script or admin endpoint to seed **`original_recipes`** for local testing (optional; not for end-user browsing).
+
+**Deliverable**: Schema and API plan aligned: internal **`original_recipes`**, user **`saved_recipes`** with **`ConvertedRecipe`** snapshots, **published** discovery, and copy semantics. All via backend API.
 
 ---
 
@@ -199,8 +240,8 @@ When user "saves" a recipe (e.g. from AI extraction result):
 
 ### 2.5.4 Save Flow for Converted Recipes
 
-- [ ] When user saves from AI workflow result: store `OriginalRecipe` in `recipes` (canonical, keyed by source_url hash).
-- [ ] Store `ConvertedRecipe` (or conversion params + result) in `users/{uid}/saved_recipes` — add `converted_recipe` field for workflow-originated saves, so user sees their portion-adjusted version with nutritional info.
+- [ ] When user saves from AI workflow result: upsert **`original_recipes/{recipe_id}`** using **`OriginalRecipeDocument`** (extraction output + app metadata; keyed by source_url hash).
+- [ ] Store **`ConvertedRecipe`** in `users/{uid}/saved_recipes` as **`converted_recipe`** for workflow-originated saves, so the user retains their portion-adjusted version with nutritional info.
 
 **Deliverable**: End-to-end AI workflow: user submits URL + meal prep params → receives converted recipe. Ready to be gated in Phase 3.
 
@@ -255,7 +296,7 @@ subscription:
 
 - [ ] Update workflow endpoint (e.g. `POST /api/workflow/generate`): require `require_subscription`.
 - [ ] Return clear error (e.g. `subscription_required`) when user lacks access.
-- [ ] Free users can still call `GET /api/recipes`, save recipes, etc.
+- [ ] Free users can still call **`GET /api/published-recipes`**, save copies to their collection, etc.
 
 **Deliverable**: Free users browse and save. Trial/subscribers access the full AI workflow (extraction + conversion). Stripe handles billing and trials.
 
@@ -270,8 +311,8 @@ subscription:
 - [ ] **/** — Landing page. CTA to sign up or sign in.
 - [ ] **/sign-in**, **/sign-up** — Auth pages.
 - [ ] **/dashboard** — User's saved recipes. Auth required.
-- [ ] **/recipes** — Browse public recipe database. Pagination, search (if implemented).
-- [ ] **/recipes/[id]** — Recipe detail. Show "Save to collection" if logged in. Show notes if in user's collection.
+- [ ] **/recipes** — Browse **published** recipes (from `GET /api/published-recipes`). Pagination, search (if implemented).
+- [ ] **/recipes/[ownerUserId]/[savedRecipeId]** — Published recipe detail (or equivalent id scheme matching the API). Show "Save to collection" if logged in (creates a **copy** with provenance). Show **notes** only when viewing **your own** saved recipe (e.g. from dashboard), not when viewing another user's published recipe.
 - [ ] **/generate** — AI workflow: URL input, loading state, result. Gated for trial/subscribers.
 - [ ] **/settings** or **/account** — Subscription management (link to Stripe Customer Portal), account info.
 
@@ -382,14 +423,14 @@ subscription:
 
 ### A. Current Codebase Notes
 
-- **Workflow**: `recipe_extraction_workflow()` in `extraction.py` returns `OriginalRecipe`. YouTube extraction is complete; web extraction is incomplete (`extract_recipe_from_web_page` returns early). Conversion workflow (meal prep adjustments) is not implemented—**to be completed in Phase 2.5**.
-- **Models**: `UserRequest`, `UserAdjustments`, `OriginalRecipe`, `ConvertedRecipe` exist. Conversion agent will consume these in Phase 2.5.
-- **Auth**: Current `ACCESS_TOKEN` header auth in `dependencies.py` will be replaced by Firebase token verification.
-- **Config**: Cosmos DB vars in `config.py` will be removed; Firebase/Stripe vars added.
+- **Auth (Phase 1)**: Firebase ID tokens — `get_current_user` / `get_current_user_optional` in `app/dependencies.py` verify Bearer tokens via Admin SDK; CORS and frontend API client are wired.
+- **Config**: Firebase project + service account paths and related settings in `app/config.py` (see `backend/.env.example`). Stripe vars added when implementing Phase 3.
+- **Workflow**: `recipe_extraction_workflow()` in `extraction.py` returns `OriginalRecipe`. YouTube extraction is complete; web extraction is incomplete (`extract_recipe_from_web_page` returns early). Conversion workflow (meal prep adjustments) is not implemented—**Phase 2.5**.
+- **Models**: `UserRequest`, `UserAdjustments`, `OriginalRecipe`, **`OriginalRecipeDocument`**, `ConvertedRecipe`, **`SavedRecipe`**, etc. in `app/services/agents/models.py`. Extraction uses **`OriginalRecipe`** only; Firestore persistence uses **`OriginalRecipeDocument`** and **`SavedRecipe`**. Conversion agent consumes `OriginalRecipe` / `ConvertedRecipe` in Phase 2.5.
 
 ### B. Firestore Indexes
 
-You may need composite indexes for queries (e.g. recipes by `created_at`, saved_recipes by `saved_at`). Firestore will prompt when you run a query that requires an index.
+You may need composite indexes for queries (e.g. **collection group** `saved_recipes` with `published == true` and ordering, `original_recipes` by `created_at`, per-user `saved_recipes` by `saved_at`). Firestore will prompt when you run a query that requires an index.
 
 ### C. Branch Strategy Summary
 
@@ -414,4 +455,4 @@ feature/*     ──▶  Local dev only
 
 ---
 
-*Document version: 1.1*
+*Document version: 1.3*

@@ -4,7 +4,7 @@
  */
 "use client";
 
-import { createContext, useContext, useEffect, useState, useCallback } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, useMemo } from "react";
 import type { User } from "firebase/auth";
 import {
   signInWithEmailAndPassword,
@@ -15,6 +15,7 @@ import {
   signInWithPopup,
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
+import { createApiClient, type ApiClient } from "@/lib/api-client";
 
 /** Shape of the value provided by AuthContext. */
 interface AuthContextValue {
@@ -25,6 +26,8 @@ interface AuthContextValue {
     signInWithGoogle: () => Promise<void>;
     signOut: () => Promise<void>;
     getIdToken: (forceRefresh?: boolean) => Promise<string | null>;
+    /** API client that sends Bearer token on requests. Use for authenticated backend calls. */
+    api: ApiClient;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -74,7 +77,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!user) return null;
     return user.getIdToken(forceRefresh);
   }, [user]);
-  
+
+  const api = useMemo(() => createApiClient(getIdToken), [getIdToken]);
+
   const value: AuthContextValue = {
     user,
     loading,
@@ -83,6 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signInWithGoogle,
     signOut,
     getIdToken,
+    api,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

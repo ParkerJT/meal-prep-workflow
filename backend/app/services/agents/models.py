@@ -1,3 +1,6 @@
+from datetime import datetime
+from typing import Literal
+
 from pydantic import BaseModel
 
 # User adjustments packaged
@@ -25,6 +28,18 @@ class OriginalRecipe(BaseModel):
     ingredients: list[Ingredient]
     instructions: list[str] # List of instructions
 
+
+# Firestore document for original_recipes/{recipeId} — same recipe body as OriginalRecipe,
+# plus app-populated metadata (not produced by the LLM). Use when reading/writing Firestore;
+# map Firestore Timestamps to/from datetime in the repository layer.
+class OriginalRecipeDocument(OriginalRecipe):
+    id: str  # document id; equals hash of normalized source_url (see BUILD_PLAN)
+    source_url: str
+    source_type: Literal["web", "youtube"]
+    created_at: datetime
+    created_by: str | None = None
+
+
 # Conversion request model (input to conversion agent)
 class ConversionRequest(BaseModel):
     original_recipe: OriginalRecipe
@@ -49,3 +64,14 @@ class ConvertedRecipe(BaseModel):
     instructions: list[str] # List of instructions
     nutritional_info: NutritionalInfo # Nutritional information
     conversion_metadata: ConversionMetadata
+
+
+# Firestore document shape for users/{userId}/saved_recipes/{savedRecipeId}
+class SavedRecipe(BaseModel):
+    recipe_id: str  # original_recipes doc id
+    saved_at: datetime
+    notes: str = ""
+    converted_recipe: ConvertedRecipe | None = None
+    published: bool = False
+    copied_from_user_id: str | None = None
+    copied_from_saved_recipe_id: str | None = None
