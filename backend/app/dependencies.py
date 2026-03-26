@@ -6,6 +6,8 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from firebase_admin import auth
 
+from app.services.firestore.client import get_firestore_client
+
 # Extract Bearer token from request and handle error manually if missing
 security = HTTPBearer(auto_error=False)
 
@@ -50,4 +52,13 @@ async def get_current_user_optional(
         return decoded_token # Returns a dict with user info
     except auth.InvalidIdTokenError:
         return None # Don't raise, just move on and return None
+
+
+def get_firestore():
+    """Firestore client (requires Firebase Admin initialized at app startup)."""
+    return get_firestore_client()
+
+
+def get_current_uid(current_user: dict = Depends(get_current_user)) -> str:
+    return current_user["uid"]
 

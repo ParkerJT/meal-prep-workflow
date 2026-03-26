@@ -179,20 +179,23 @@ users/{userId}/saved_recipes/{savedRecipeId}
 
 ### 2.2 Firestore Security Rules
 
-- [ ] **`original_recipes`**: Deny client reads and writes (backend only via Admin SDK). Not intended for direct client access.
-- [ ] **`users/{userId}/saved_recipes`**: Owner read/write when `request.auth.uid == userId`. Public reads of **published** rows are typically served **only through the backend** (Admin SDK) so rules can remain owner-only; alternatively add guarded rules if you later allow limited client reads.
+- [x] **`original_recipes`**: Deny client reads and writes (backend only via Admin SDK). Not intended for direct client access.
+- [x] **`users/{userId}/saved_recipes`**: Owner read/write when `request.auth.uid == userId`. Public reads of **published** rows are typically served **only through the backend** (Admin SDK) so rules can remain owner-only; alternatively add guarded rules if you later allow limited client reads.
+
+Rules live in repo root [`firestore.rules`](firestore.rules); [`firebase.json`](firebase.json) wires rules and [`firestore.indexes.json`](firestore.indexes.json). Deploy to each Firebase project (staging/production) with Firebase CLI: `firebase deploy --only firestore` (from repo root, with CLI logged into the correct project). Composite index for published list queries is defined in `firestore.indexes.json`.
 
 *Note: If all Firestore access goes through the backend, rules can be restrictive; backend uses Admin SDK.*
 
 ### 2.3 Backend: Recipe & Collection APIs
 
-- [ ] **GET /api/published-recipes** — List published saves (paginated). Public. Backed by collection group (or equivalent) on `saved_recipes` where `published == true`.
-- [ ] **GET /api/published-recipes/{ownerUserId}/{savedRecipeId}** — Single published recipe by owner uid + saved recipe doc id. Public. Returns data appropriate for non-owners (no author `notes`).
-- [ ] **POST /api/original-recipes** or internal service — Create **`original_recipes`** when saving from AI workflow if missing (not a public “catalog” write; auth + same patterns as workflow save). *Naming can match your router; prefer not to expose a generic public POST that bypasses workflow.*
-- [ ] **GET /api/users/me/saved-recipes** — List current user's saved recipes (includes `notes`, `published`, provenance fields). Auth required.
-- [ ] **POST /api/users/me/saved-recipes** — Create save. Body: `{ recipe_id, notes?, converted_recipe?, published? }` (workflow fills `converted_recipe` in Phase 2.5). For **copy-from-published**, body includes source identifiers so the backend sets `copied_from_*` and disallows `published` on create. Auth required.
-- [ ] **PATCH /api/users/me/saved-recipes/{savedRecipeId}** — Update `notes`, `converted_recipe`, and/or `published` (reject `published: true` if copy provenance forbids it). Auth required.
-- [ ] **DELETE /api/users/me/saved-recipes/{savedRecipeId}** — Remove from collection. Auth required.
+- [x] **GET /api/published-recipes** — List published saves (paginated). Public. Backed by collection group (or equivalent) on `saved_recipes` where `published == true`.
+- [x] **GET /api/published-recipes/{ownerUserId}/{savedRecipeId}** — Single published recipe by owner uid + saved recipe doc id. Public. Returns data appropriate for non-owners (no author `notes`).
+- [x] **PUT /api/original-recipes/{recipeId}** — Upsert **`original_recipes`** (auth). Same as internal service for workflow/dev; `GET /api/original-recipes/{recipeId}` reads canonical doc.
+- [x] **GET /api/users/me/saved-recipes** — List current user's saved recipes (includes `notes`, `published`, provenance fields). Auth required.
+- [x] **GET /api/users/me/saved-recipes/{savedRecipeId}** — Single saved recipe for the current user. Auth required.
+- [x] **POST /api/users/me/saved-recipes** — Create save. Body: `{ recipe_id, notes?, converted_recipe?, published? }` (workflow fills `converted_recipe` in Phase 2.5). For **copy-from-published**, include `source_owner_user_id` + `source_saved_recipe_id`; backend sets `copied_from_*` and `published=false`. Auth required.
+- [x] **PATCH /api/users/me/saved-recipes/{savedRecipeId}** — Update `notes`, `converted_recipe`, and/or `published` (reject `published: true` if copy provenance forbids it). Auth required.
+- [x] **DELETE /api/users/me/saved-recipes/{savedRecipeId}** — Remove from collection. Auth required.
 
 ### 2.4 Save Flow Logic
 
