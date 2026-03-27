@@ -1,8 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.dependencies import get_current_uid, get_firestore
-from app.schemas.recipes import SavedRecipeCreate, SavedRecipeResponse, SavedRecipeUpdate
+from app.schemas.recipes import (
+    SavedRecipeCreate,
+    SavedRecipeResponse,
+    SavedRecipeUpdate,
+    WorkflowSaveCreate,
+)
 from app.services.agents.models import SavedRecipe
+from app.services import save_flow
 from app.services.firestore import saved_recipes as saved_svc
 from app.services.firestore.timestamps import utc_now
 
@@ -41,6 +47,25 @@ def get_my_saved_recipe(
     if row is None:
         raise HTTPException(status_code=404, detail="Saved recipe not found")
     doc_id, sr = row
+    return _to_response(doc_id, sr)
+
+
+@router.post("/from-workflow", response_model=SavedRecipeResponse, status_code=201)
+def create_saved_from_workflow(
+    body: WorkflowSaveCreate,
+    uid: str = Depends(get_current_uid),
+    db=Depends(get_firestore),
+):
+    doc_id, sr = save_flow.save_from_workflow(
+        db,
+        uid,
+        source_url=body.source_url,
+        source_type=body.source_type,
+        original_recipe=body.original_recipe,
+        converted_recipe=body.converted_recipe,
+        notes=body.notes,
+        published=body.published,
+    )
     return _to_response(doc_id, sr)
 
 

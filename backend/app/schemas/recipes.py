@@ -1,8 +1,9 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, model_validator
 
-from app.services.agents.models import ConvertedRecipe, OriginalRecipeDocument
+from app.services.agents.models import ConvertedRecipe, OriginalRecipe, OriginalRecipeDocument
 
 
 class SavedRecipeResponse(BaseModel):
@@ -47,6 +48,17 @@ class SavedRecipeUpdate(BaseModel):
     converted_recipe: ConvertedRecipe | None = None
     published: bool | None = None
     recipe_id: str | None = None
+
+
+class WorkflowSaveCreate(BaseModel):
+    """Create a user save after extraction: ensures ``original_recipes`` then ``saved_recipes`` (§2.4)."""
+
+    source_url: str
+    source_type: Literal["web", "youtube"]
+    original_recipe: OriginalRecipe
+    notes: str = ""
+    converted_recipe: ConvertedRecipe | None = None
+    published: bool = False
 
 
 class PublishedRecipeSummary(BaseModel):

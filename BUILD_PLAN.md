@@ -199,6 +199,13 @@ Rules live in repo root [`firestore.rules`](firestore.rules); [`firebase.json`](
 
 ### 2.4 Save Flow Logic
 
+Implementation (backend):
+
+- [x] **`recipe_id`** — [`backend/app/services/recipe_id.py`](backend/app/services/recipe_id.py): `normalize_source_url()`, `compute_recipe_id()` (SHA-256 digest, first 32 hex chars per schema note).
+- [x] **Extraction cache** — [`recipe_extraction_workflow(db, url)`](backend/app/services/agents/extraction.py) reads `original_recipes/{recipe_id}` **before** any page fetch / transcript / LLM; on hit returns `OriginalRecipe` via `original_recipe_from_document()` (no API cost).
+- [x] **Save orchestration** — [`save_from_workflow()`](backend/app/services/save_flow.py): ensures `original_recipes` exists (create on miss only, no overwrite on hit), then creates `users/{uid}/saved_recipes`.
+- [x] **API** — `POST /api/users/me/saved-recipes/from-workflow` (auth): body [`WorkflowSaveCreate`](backend/app/schemas/recipes.py) — `source_url`, `source_type` (`web` | `youtube`), `original_recipe`, optional `converted_recipe`, `notes`, `published`.
+
 When user saves from the AI workflow (Phase 2.5) or creates a save:
 
 1. Compute `recipe_id` from `source_url`.
@@ -209,11 +216,9 @@ When a user **copies a published recipe**:
 
 1. Create a new `saved_recipes` doc for the current user with copied `recipe_id` and **`converted_recipe`**, `published=false`, `notes` empty or user-supplied, and **`copied_from_user_id` / `copied_from_saved_recipe_id`** set. Do not allow publishing this doc.
 
-### 2.6 Seed Data (Optional)
-
-- [ ] Add script or admin endpoint to seed **`original_recipes`** for local testing (optional; not for end-user browsing).
-
 **Deliverable**: Schema and API plan aligned: internal **`original_recipes`**, user **`saved_recipes`** with **`ConvertedRecipe`** snapshots, **published** discovery, and copy semantics. All via backend API.
+
+**Phase 2.5 handoff:** [`run_workflow()`](backend/app/services/agents/workflow.py) uses `recipe_extraction_workflow(get_firestore_client(), user_request.recipe_url)` (bug fixed: uses `user_request.recipe_url`). Remaining: conversion agent, `POST /api/workflow/generate`, and wiring extract → convert → `save_from_workflow` in one user-facing flow.
 
 ---
 
@@ -223,10 +228,10 @@ When a user **copies a published recipe**:
 
 ### 2.5.1 Complete Web Extraction
 
-- [ ] Implement `extract_recipe_from_web_page()` in `extraction.py` (currently returns early / incomplete).
-- [ ] Add system instructions for web page extraction (similar to `SYSTEM_INSTRUCTIONS_YOUTUBE`).
-- [ ] Use OpenAI structured output with `OriginalRecipe` schema.
-- [ ] Test with various recipe website formats.
+- [x] Implement `extract_recipe_from_web_page()` in `extraction.py`.
+- [x] Add system instructions for web page extraction (similar to `SYSTEM_INSTRUCTIONS_YOUTUBE`).
+- [x] Use OpenAI structured output with `OriginalRecipe` schema.
+- [x] Test with various recipe website formats.
 
 ### 2.5.2 Build Conversion Agent
 
@@ -238,7 +243,7 @@ When a user **copies a published recipe**:
 
 - [ ] Update `run_workflow()` in `workflow.py` to accept `UserRequest` (recipe_url + user_adjustments).
 - [ ] Flow: extract → convert → return `ConvertedRecipe`.
-- [ ] Fix current bug: `recipe_extraction_workflow(UserRequest.recipe_url)` should use `user_request.recipe_url`.
+- [x] Fix current bug: `recipe_extraction_workflow(UserRequest.recipe_url)` should use `user_request.recipe_url`.
 - [ ] Create/update API endpoint: `POST /api/workflow/generate` — accepts URL + adjustments, returns `ConvertedRecipe`.
 
 ### 2.5.4 Save Flow for Converted Recipes
@@ -428,7 +433,7 @@ subscription:
 
 - **Auth (Phase 1)**: Firebase ID tokens — `get_current_user` / `get_current_user_optional` in `app/dependencies.py` verify Bearer tokens via Admin SDK; CORS and frontend API client are wired.
 - **Config**: Firebase project + service account paths and related settings in `app/config.py` (see `backend/.env.example`). Stripe vars added when implementing Phase 3.
-- **Workflow**: `recipe_extraction_workflow()` in `extraction.py` returns `OriginalRecipe`. YouTube extraction is complete; web extraction is incomplete (`extract_recipe_from_web_page` returns early). Conversion workflow (meal prep adjustments) is not implemented—**Phase 2.5**.
+- **Workflow**: `recipe_extraction_workflow()` in `extraction.py` returns `OriginalRecipe`. YouTube and web extraction (trafilatura + `extract_recipe_from_web_page` with structured output) are complete. Conversion workflow (meal prep adjustments) is not implemented—**Phase 2.5** (see 2.5.2–2.5.4).
 - **Models**: `UserRequest`, `UserAdjustments`, `OriginalRecipe`, **`OriginalRecipeDocument`**, `ConvertedRecipe`, **`SavedRecipe`**, etc. in `app/services/agents/models.py`. Extraction uses **`OriginalRecipe`** only; Firestore persistence uses **`OriginalRecipeDocument`** and **`SavedRecipe`**. Conversion agent consumes `OriginalRecipe` / `ConvertedRecipe` in Phase 2.5.
 
 ### B. Firestore Indexes

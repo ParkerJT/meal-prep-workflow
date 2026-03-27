@@ -75,3 +75,14 @@ class SavedRecipe(BaseModel):
     published: bool = False
     copied_from_user_id: str | None = None
     copied_from_saved_recipe_id: str | None = None
+
+
+def original_recipe_from_document(doc: OriginalRecipeDocument) -> OriginalRecipe:
+    """Recipe fields only — for Firestore cache hits before LLM extraction."""
+    return OriginalRecipe(
+        title=doc.title,
+        description=doc.description,
+        servings=doc.servings,
+        ingredients=doc.ingredients,
+        instructions=doc.instructions,
+    )
