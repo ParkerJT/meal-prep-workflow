@@ -203,14 +203,16 @@ Implementation (backend):
 
 - [x] **`recipe_id`** — [`backend/app/services/recipe_id.py`](backend/app/services/recipe_id.py): `normalize_source_url()`, `compute_recipe_id()` (SHA-256 digest, first 32 hex chars per schema note).
 - [x] **Extraction cache** — [`recipe_extraction_workflow(db, url)`](backend/app/services/agents/extraction.py) reads `original_recipes/{recipe_id}` **before** any page fetch / transcript / LLM; on hit returns `OriginalRecipe` via `original_recipe_from_document()` (no API cost).
-- [x] **Save orchestration** — [`save_from_workflow()`](backend/app/services/save_flow.py): ensures `original_recipes` exists (create on miss only, no overwrite on hit), then creates `users/{uid}/saved_recipes`.
+- [x] **Save orchestration** — [`save_from_workflow()`](backend/app/services/save_flow.py): ensures `original_recipes` exists (create on miss only, no overwrite on hit), then creates `users/{uid}/saved_recipes`. After **Phase 2.5.3**, the primary moment canonical **`original_recipes`** is populated from a **new** extraction is the **generate** workflow (see §2.5.3); user save still uses create-on-miss for edge cases (e.g. save API used without a prior generate).
 - [x] **API** — `POST /api/users/me/saved-recipes/from-workflow` (auth): body [`WorkflowSaveCreate`](backend/app/schemas/recipes.py) — `source_url`, `source_type` (`web` | `youtube`), `original_recipe`, optional `converted_recipe`, `notes`, `published`.
 
 When user saves from the AI workflow (Phase 2.5) or creates a save:
 
 1. Compute `recipe_id` from `source_url`.
-2. Check if `original_recipes/{recipe_id}` exists. If not, create it from extracted **`OriginalRecipe`** plus metadata into **`OriginalRecipeDocument`**.
-3. Create `users/{userId}/saved_recipes` with **`SavedRecipe`** fields: `recipe_id`, `saved_at`, `notes`, optional **`converted_recipe`**, `published` (default false), provenance null unless copying.
+2. Check if `original_recipes/{recipe_id}` exists. If not, create it from extracted **`OriginalRecipe`** plus metadata into **`OriginalRecipeDocument`** (usually redundant once **generate** persists the canonical doc—see §2.5.3).
+3. Create `users/{userId}/saved_recipes` with **`SavedRecipe`** fields: `recipe_id`, `saved_at`, `notes`, optional **`converted_recipe`**, `published` (default false), provenance null unless copying. **Only this step adds the user’s row**; persisting **`original_recipes`** on save is for misses only.
+
+**Persistence split (Phase 2.5):** Running **generate** (§2.5.3) should **write canonical `original_recipes`** whenever extraction runs (after an LLM extraction miss) so extraction cost is not lost and any user can reuse the cache. **User save** (§2.5.4 / `from-workflow`) **only creates `saved_recipes`**—the user-specific snapshot (`converted_recipe`, notes, publish flag). It does not re-store the canonical original except via create-on-miss if the doc is still missing.
 
 When a user **copies a published recipe**:
 
@@ -218,7 +220,7 @@ When a user **copies a published recipe**:
 
 **Deliverable**: Schema and API plan aligned: internal **`original_recipes`**, user **`saved_recipes`** with **`ConvertedRecipe`** snapshots, **published** discovery, and copy semantics. All via backend API.
 
-**Phase 2.5 handoff:** [`run_workflow()`](backend/app/services/agents/workflow.py) uses `recipe_extraction_workflow(get_firestore_client(), user_request.recipe_url)` (bug fixed: uses `user_request.recipe_url`). Remaining: conversion agent, `POST /api/workflow/generate`, and wiring extract → convert → `save_from_workflow` in one user-facing flow.
+**Phase 2.5 handoff:** [`run_workflow()`](backend/app/services/agents/workflow.py) — extract via `recipe_extraction_workflow`, [`ensure_canonical_original_recipe()`](backend/app/services/save_flow.py) on cache miss, then [`convert_recipe()`](backend/app/services/agents/conversion.py) → **`ConvertedRecipe`**. **`POST /api/workflow/generate`** ([`routes/workflow.py`](backend/app/routes/workflow.py)). Persist user library: **`POST /api/users/me/saved-recipes/from-workflow`** ([`saved_recipes.py`](backend/app/routes/saved_recipes.py)). **Remaining before production UX:** Phase 3 subscription gating on generate; frontend wiring to **`generate`** + **`from-workflow`** as needed.
 
 ---
 
@@ -235,21 +237,22 @@ When a user **copies a published recipe**:
 
 ### 2.5.2 Build Conversion Agent
 
-- [ ] Create conversion agent/service that takes `OriginalRecipe` + `UserAdjustments` → `ConvertedRecipe`.
-- [ ] Conversion logic: adjust ingredient quantities for target servings; use AI to estimate/calculate nutritional info (calories, protein) and apply user targets.
-- [ ] Output conforms to `ConvertedRecipe` model (nutritional_info, conversion_metadata).
+- [x] Create conversion agent/service that takes `OriginalRecipe` + `UserAdjustments` → `ConvertedRecipe`.
+- [x] Conversion logic: adjust ingredient quantities for target servings; use AI to estimate/calculate nutritional info (calories, protein) and apply user targets.
+- [x] Output conforms to `ConvertedRecipe` model (nutritional_info, conversion_metadata).
 
 ### 2.5.3 Wire Full Workflow
 
-- [ ] Update `run_workflow()` in `workflow.py` to accept `UserRequest` (recipe_url + user_adjustments).
-- [ ] Flow: extract → convert → return `ConvertedRecipe`.
+- [x] Update `run_workflow()` in `workflow.py` to accept `UserRequest` (recipe_url + user_adjustments).
+- [x] Flow: extract → **if extraction was a cache miss**, upsert canonical **`original_recipes/{recipe_id}`** (`OriginalRecipeDocument`, create on miss only, no overwrite on hit—same semantics as [`save_from_workflow`](backend/app/services/save_flow.py)) so LLM extraction cost is retained and the recipe is reusable for everyone → convert → return `ConvertedRecipe`. On **cache hit**, skip fetch/LLM and **do not** require a new write (doc already exists).
+- [x] `POST /api/workflow/generate` (and `run_workflow`) **does not** create or update **`users/{uid}/saved_recipes`**—only **`original_recipes`** when persisting a new extraction as above.
 - [x] Fix current bug: `recipe_extraction_workflow(UserRequest.recipe_url)` should use `user_request.recipe_url`.
-- [ ] Create/update API endpoint: `POST /api/workflow/generate` — accepts URL + adjustments, returns `ConvertedRecipe`.
+- [x] Create/update API endpoint: `POST /api/workflow/generate` — accepts URL + adjustments, returns `ConvertedRecipe`.
 
 ### 2.5.4 Save Flow for Converted Recipes
 
-- [ ] When user saves from AI workflow result: upsert **`original_recipes/{recipe_id}`** using **`OriginalRecipeDocument`** (extraction output + app metadata; keyed by source_url hash).
-- [ ] Store **`ConvertedRecipe`** in `users/{uid}/saved_recipes` as **`converted_recipe`** for workflow-originated saves, so the user retains their portion-adjusted version with nutritional info.
+- [x] **`original_recipes`** after generate: handled in §2.5.3 (canonical doc when extraction runs). **User save** does not need to re-upsert unless the doc is still missing (create-on-miss in [`save_from_workflow`](backend/app/services/save_flow.py)).
+- [x] When the user saves from the AI workflow result: **only** create/update **`users/{uid}/saved_recipes`** — store **`ConvertedRecipe`** as **`converted_recipe`**, plus `notes`, `published`, etc., so the user retains their portion-adjusted snapshot. **No duplicate canonical original write** when the doc already exists from generate. **API:** [`POST /api/users/me/saved-recipes/from-workflow`](backend/app/routes/saved_recipes.py) with [`WorkflowSaveCreate`](backend/app/schemas/recipes.py) (auth).
 
 **Deliverable**: End-to-end AI workflow: user submits URL + meal prep params → receives converted recipe. Ready to be gated in Phase 3.
 
@@ -433,8 +436,8 @@ subscription:
 
 - **Auth (Phase 1)**: Firebase ID tokens — `get_current_user` / `get_current_user_optional` in `app/dependencies.py` verify Bearer tokens via Admin SDK; CORS and frontend API client are wired.
 - **Config**: Firebase project + service account paths and related settings in `app/config.py` (see `backend/.env.example`). Stripe vars added when implementing Phase 3.
-- **Workflow**: `recipe_extraction_workflow()` in `extraction.py` returns `OriginalRecipe`. YouTube and web extraction (trafilatura + `extract_recipe_from_web_page` with structured output) are complete. Conversion workflow (meal prep adjustments) is not implemented—**Phase 2.5** (see 2.5.2–2.5.4).
-- **Models**: `UserRequest`, `UserAdjustments`, `OriginalRecipe`, **`OriginalRecipeDocument`**, `ConvertedRecipe`, **`SavedRecipe`**, etc. in `app/services/agents/models.py`. Extraction uses **`OriginalRecipe`** only; Firestore persistence uses **`OriginalRecipeDocument`** and **`SavedRecipe`**. Conversion agent consumes `OriginalRecipe` / `ConvertedRecipe` in Phase 2.5.
+- **Workflow**: [`run_workflow()`](backend/app/services/agents/workflow.py) calls `recipe_extraction_workflow()` (cache read + extract), [`ensure_canonical_original_recipe()`](backend/app/services/save_flow.py) on miss, then **`convert_recipe()`** → **`ConvertedRecipe`**. **`POST /api/workflow/generate`** in [`routes/workflow.py`](backend/app/routes/workflow.py). **`POST /api/test/workflow`** remains a thin alias for manual QA. **Save after workflow:** **`POST /api/users/me/saved-recipes/from-workflow`** with optional **`converted_recipe`** — [`save_from_workflow()`](backend/app/services/save_flow.py) ensures **`original_recipes`** create-on-miss only, then new **`saved_recipes`** row (§2.5.4).
+- **Models**: `UserRequest`, `UserAdjustments`, `OriginalRecipe`, **`OriginalRecipeDocument`**, `ConvertedRecipe`, **`SavedRecipe`**, etc. in `app/services/agents/models.py`. Extraction uses **`OriginalRecipe`** only; Firestore persistence uses **`OriginalRecipeDocument`** (canonical, shared) and **`SavedRecipe`** (per-user). Conversion agent consumes **`OriginalRecipe`** + **`UserRequest`** and outputs **`ConvertedRecipe`**.
 
 ### B. Firestore Indexes
 
@@ -463,4 +466,4 @@ feature/*     ──▶  Local dev only
 
 ---
 
-*Document version: 1.3*
+*Document version: 1.6*

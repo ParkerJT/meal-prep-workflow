@@ -39,12 +39,6 @@ class OriginalRecipeDocument(OriginalRecipe):
     created_at: datetime
     created_by: str | None = None
 
-
-# Conversion request model (input to conversion agent)
-class ConversionRequest(BaseModel):
-    original_recipe: OriginalRecipe
-    user_adjustments: UserAdjustments
-
 # Nutritional information model (for converted recipe)
 class NutritionalInfo(BaseModel):
     calories: int # Calories per serving

@@ -3,7 +3,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import Settings
-from app.routes import auth, original_recipes, published_recipes, saved_recipes, test
+from app.routes import auth, original_recipes, published_recipes, saved_recipes, test, workflow
 from firebase_admin import credentials, initialize_app
 from contextlib import asynccontextmanager
 
@@ -56,6 +56,7 @@ app.include_router(auth.router)
 app.include_router(published_recipes.router)
 app.include_router(original_recipes.router)
 app.include_router(saved_recipes.router)
+app.include_router(workflow.router)
 app.include_router(test.router)
 
 # Configure CORS
