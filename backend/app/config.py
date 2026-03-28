@@ -10,7 +10,7 @@ class Settings:
     # OpenAI API Key
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
 
-    # OpenAI Model
+    # OpenAI model for extraction + conversion (`extraction.py`, `conversion.py`)
     OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
     # Firebase Project ID

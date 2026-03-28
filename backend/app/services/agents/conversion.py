@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from openai import OpenAI
 
+from app.config import Settings
 from app.services.agents.models import ConvertedRecipe, OriginalRecipe, UserRequest
 
-CONVERSION_MODEL = "gpt-4o-mini"
+settings = Settings()
+CONVERSION_MODEL = settings.OPENAI_MODEL
 
 SYSTEM_INSTRUCTIONS_CONVERSION = """You are a meal-prep recipe conversion specialist. You receive an extracted recipe and the user's target portion and nutrition goals. You must produce a converted recipe that matches the required output schema.
 

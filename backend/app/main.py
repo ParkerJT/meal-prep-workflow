@@ -1,11 +1,14 @@
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import Settings
-from app.routes import auth, original_recipes, published_recipes, saved_recipes, test, workflow
+from app.routes import auth, original_recipes, published_recipes, saved_recipes, workflow
 from firebase_admin import credentials, initialize_app
 from contextlib import asynccontextmanager
+
+logger = logging.getLogger(__name__)
 
 # Initialize Settings
 settings = Settings()
@@ -40,9 +43,9 @@ async def lifespan(app: FastAPI):
             )
         cred = credentials.Certificate(str(resolved))
         initialize_app(cred)
-        print("Firebase initialized")
+        logger.info("Firebase initialized")
     yield
-    print("Firebase app shut down")
+    logger.info("Firebase app shut down")
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -57,7 +60,6 @@ app.include_router(published_recipes.router)
 app.include_router(original_recipes.router)
 app.include_router(saved_recipes.router)
 app.include_router(workflow.router)
-app.include_router(test.router)
 
 # Configure CORS
 app.add_middleware(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from app.config import Settings
@@ -14,10 +15,11 @@ import yt_dlp
 from trafilatura import extract, html2txt, baseline
 from trafilatura.downloads import fetch_response
 
+logger = logging.getLogger(__name__)
 settings = Settings()
 
-# Single model for structured recipe extraction (web + YouTube).
-EXTRACTION_MODEL = "gpt-4o-mini"
+# Single model for structured recipe extraction (web + YouTube); from `Settings.OPENAI_MODEL`.
+EXTRACTION_MODEL = settings.OPENAI_MODEL
 
 # Main article text from trafilatura can be very long; cap user message size for context limits.
 WEB_PAGE_TEXT_MAX_CHARS = 100_000
@@ -406,14 +408,14 @@ def scrape_web_page(url: str) -> str:
   # Fallback 1: Less filtered extraction
   if not content or len(content.strip()) < 100:
     content = html2txt(html)
-    print("Fallback 1: Less filtered extraction")
+    logger.debug("Web extract: fallback 1 (less filtered extraction)")
   
   if not content or len(content.strip()) < 100:
     _, content, _ = baseline(html)
-    print("Fallback 2: Baseline extraction")
+    logger.debug("Web extract: fallback 2 (baseline extraction)")
 
   if not content or len(content.strip()) < 20:
-    print("Fallback 3: No extractable content")
+    logger.debug("Web extract: fallback 3 (no extractable content)")
     raise ValueError("Page contains no extractable content")
   
   return content

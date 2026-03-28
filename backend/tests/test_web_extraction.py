@@ -1,7 +1,7 @@
 """
 Unit tests for web recipe extraction (LLM path is mocked).
 
-Manual QA checklist (run against a running backend with OPENAI_API_KEY, e.g. POST /api/workflow/generate or POST /api/test/workflow):
+Manual QA checklist (run against a running backend with OPENAI_API_KEY, e.g. POST /api/workflow/generate):
 - Blog / magazine recipe with rich layout and schema (verify ingredients + steps complete).
 - Minimal text-only recipe site (verify parsing still works).
 - Long article with narrative before the recipe card (verify primary recipe is extracted).
