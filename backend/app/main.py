@@ -1,10 +1,11 @@
 import logging
 from pathlib import Path
 
+import stripe
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import Settings
-from app.routes import auth, original_recipes, published_recipes, saved_recipes, workflow
+from app.routes import auth, original_recipes, published_recipes, saved_recipes, stripe_webhook, subscription, workflow
 from firebase_admin import credentials, initialize_app
 from contextlib import asynccontextmanager
 
@@ -44,6 +45,9 @@ async def lifespan(app: FastAPI):
         cred = credentials.Certificate(str(resolved))
         initialize_app(cred)
         logger.info("Firebase initialized")
+    if settings.STRIPE_SECRET_KEY:
+        stripe.api_key = settings.STRIPE_SECRET_KEY
+        logger.info("Stripe API key configured")
     yield
     logger.info("Firebase app shut down")
 
@@ -60,6 +64,8 @@ app.include_router(published_recipes.router)
 app.include_router(original_recipes.router)
 app.include_router(saved_recipes.router)
 app.include_router(workflow.router)
+app.include_router(subscription.router)
+app.include_router(stripe_webhook.router)
 
 # Configure CORS
 app.add_middleware(

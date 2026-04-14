@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 
+from app.dependencies import require_subscription
 from app.main import app
 from app.services.agents.models import (
     ConvertedRecipe,
@@ -71,23 +72,32 @@ def test_run_workflow_extracts_persists_converts(
     mock_convert.assert_called_once()
 
 
+async def _override_require_subscription() -> dict:
+    """Bypass Firestore subscription check in API tests."""
+    return {"uid": "test-user", "email": "test@example.com"}
+
+
 @patch("app.routes.workflow.run_workflow")
 def test_workflow_generate_endpoint(mock_run: MagicMock) -> None:
     converted = _sample_converted()
     mock_run.return_value = converted
 
-    client = TestClient(app)
-    resp = client.post(
-        "/api/workflow/generate",
-        json={
-            "recipe_url": "https://example.com/r",
-            "user_adjustments": {
-                "target_servings": 2,
-                "target_calories": 400,
-                "target_protein": 30,
+    app.dependency_overrides[require_subscription] = _override_require_subscription
+    try:
+        client = TestClient(app)
+        resp = client.post(
+            "/api/workflow/generate",
+            json={
+                "recipe_url": "https://example.com/r",
+                "user_adjustments": {
+                    "target_servings": 2,
+                    "target_calories": 400,
+                    "target_protein": 30,
+                },
             },
-        },
-    )
+        )
+    finally:
+        app.dependency_overrides.clear()
 
     assert resp.status_code == 200
     data = resp.json()

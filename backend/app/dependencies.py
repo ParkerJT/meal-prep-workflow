@@ -2,11 +2,14 @@
 Firebase auth dependencies.
 """
 
+from typing import Any
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from firebase_admin import auth
 
 from app.services.firestore.client import get_firestore_client
+from app.services.firestore.subscription import get_subscription
 
 # Extract Bearer token from request and handle error manually if missing
 security = HTTPBearer(auto_error=False)
@@ -61,4 +64,22 @@ def get_firestore():
 
 def get_current_uid(current_user: dict = Depends(get_current_user)) -> str:
     return current_user["uid"]
+
+
+async def require_subscription(
+    current_user: dict = Depends(get_current_user),
+    db: Any = Depends(get_firestore),
+) -> dict:
+    """Allow only users with an active or trialing subscription (Phase 3)."""
+    uid = current_user["uid"]
+    sub = get_subscription(db, uid)
+    if sub is None or sub.status not in ("active", "trialing"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "subscription_required",
+                "message": "An active or trialing subscription is required for this feature.",
+            },
+        )
+    return current_user
 

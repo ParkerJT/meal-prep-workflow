@@ -21,3 +21,19 @@ class Settings:
 
     # CORS Allowed Origins
     CORS_ALLOWED_ORIGINS: list[str] = os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
+
+    # Stripe (Phase 3: Checkout, webhooks, Customer Portal). See BUILD_PLAN §3.1.
+    # Secret key: Dashboard → Developers → API keys (sk_test_... / sk_live_...).
+    STRIPE_SECRET_KEY: str = os.getenv("STRIPE_SECRET_KEY", "")
+    # Webhook signing secret: Dashboard → Developers → Webhooks → endpoint → Signing secret (whsec_...).
+    STRIPE_WEBHOOK_SECRET: str = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+    # Publishable key: same API keys page (pk_test_... / pk_live_...). Optional until client-side Stripe.js.
+    STRIPE_PUBLISHABLE_KEY: str = os.getenv("STRIPE_PUBLISHABLE_KEY", "")
+    # Subscription prices from Product catalog (price_...); not secret but environment-specific.
+    STRIPE_PRICE_MONTHLY: str = os.getenv("STRIPE_PRICE_MONTHLY", "")
+    STRIPE_PRICE_ANNUAL: str = os.getenv("STRIPE_PRICE_ANNUAL", "")
+
+    # Stripe Checkout + Billing Portal redirect URLs (full URLs, e.g. http://localhost:3000/dashboard)
+    STRIPE_CHECKOUT_SUCCESS_URL: str = os.getenv("STRIPE_CHECKOUT_SUCCESS_URL", "")
+    STRIPE_CHECKOUT_CANCEL_URL: str = os.getenv("STRIPE_CHECKOUT_CANCEL_URL", "")
+    STRIPE_BILLING_PORTAL_RETURN_URL: str = os.getenv("STRIPE_BILLING_PORTAL_RETURN_URL", "")

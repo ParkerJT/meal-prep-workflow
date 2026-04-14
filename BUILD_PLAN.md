@@ -264,17 +264,19 @@ When a user **copies a published recipe**:
 
 ### 3.1 Stripe Setup
 
-- [ ] Create Stripe account. Create products: Monthly Plan, Annual Plan.
-- [ ] Create prices with 14-day trial: `trial_period_days: 14`.
-- [ ] Store Stripe secret key and webhook secret in Secret Manager.
-- [ ] Use Stripe **test mode** for staging; **live mode** for production.
+- [x] Create Stripe account. Create products: Monthly Plan, Annual Plan (Stripe Dashboard).
+- [x] Apply **14-day trial** when creating the Checkout Session (`subscription_data.trial_period_days: 14`) — implemented in `POST /api/subscription/checkout`.
+- [ ] Store Stripe secret key and webhook secret in **GCP Secret Manager** (staging/production); local dev uses `backend/.env` only.
+- [ ] Deployed environments: Stripe **test mode** keys for staging, **live mode** for production.
+
+*Reference:* [API keys](https://docs.stripe.com/keys), [webhook signatures](https://docs.stripe.com/webhooks/signatures). Env var names: `backend/.env.example`.
 
 ### 3.2 Subscription Status Storage
 
-Store in Firestore: `users/{userId}/subscription` (or `users/{userId}` document with subscription fields):
+- [x] Implement Firestore persistence for subscription state (read by gating; written from webhooks): document `users/{userId}/subscription/default` plus index `stripe_customers/{stripeCustomerId}` → `uid`. Fields:
 
 ```
-subscription:
+subscription (document fields):
   - stripe_customer_id: string
   - stripe_subscription_id: string | null
   - status: "active" | "trialing" | "past_due" | "canceled" | "none"
@@ -283,31 +285,29 @@ subscription:
   - trial_end: timestamp | null
 ```
 
+Implementation: [`backend/app/services/firestore/subscription.py`](backend/app/services/firestore/subscription.py), [`backend/app/schemas/subscription.py`](backend/app/schemas/subscription.py).
+
 ### 3.3 Backend: Stripe Integration
 
-- [ ] Add `stripe` to backend dependencies.
-- [ ] **POST /api/subscription/checkout** — Create Stripe Checkout session. Redirect user to Stripe. Auth required.
-- [ ] **POST /api/subscription/portal** — Create Stripe Customer Portal session. For managing/canceling subscription. Auth required.
-- [ ] **POST /api/webhooks/stripe** — Webhook endpoint. Verify signature. Handle:
-  - `checkout.session.completed` — New subscription. Create/update Firestore.
-  - `customer.subscription.updated` — Status/plan changes.
-  - `customer.subscription.deleted` — Cancellation.
-  - `invoice.payment_failed` — Optional: notify user, update status.
-- [ ] Create `require_subscription` dependency: checks `users/{uid}/subscription` for `active` or `trialing`. Raise 403 if not.
-- [ ] Gate AI workflow endpoint with `require_subscription`.
+- [x] Add `stripe` to backend dependencies (`pyproject.toml`).
+- [x] **POST /api/subscription/checkout** — Create Stripe Checkout session; returns `{ "url" }`. Auth required (`get_current_uid`).
+- [x] **POST /api/subscription/portal** — Create Stripe Customer Portal session; returns `{ "url" }`. Auth required.
+- [x] **POST /api/webhooks/stripe** — Verify signature; dispatch events; **persist subscription + customer→uid mapping** (see `stripe_webhook_handlers.py`).
+- [x] Create `require_subscription` dependency: checks `users/{uid}/subscription` for `active` or `trialing`. Raise 403 if not.
+- [x] Gate **`POST /api/workflow/generate`** with `require_subscription`.
 
 ### 3.4 Trial Logic
 
-- [ ] When user starts trial: Create Stripe Checkout with `subscription_data.trial_period_days: 14`.
-- [ ] Stripe webhook sets `status: "trialing"` and `trial_end`.
-- [ ] `require_subscription` allows access when `status in ["active", "trialing"]`.
-- [ ] After trial ends without payment: Stripe sets status to `canceled` or `past_due`; backend denies AI access.
+- [x] When user starts trial: Create Stripe Checkout with `subscription_data.trial_period_days: 14`.
+- [x] Webhook handlers persist `status` and `trial_end` from Stripe Subscription objects.
+- [x] `require_subscription` allows access when `status in ["active", "trialing"]`.
+- [x] After trial ends without payment: Stripe moves subscription status; backend reflects via webhooks; `require_subscription` denies when not `active`/`trialing`.
 
 ### 3.5 AI Workflow Gating
 
-- [ ] Update workflow endpoint (e.g. `POST /api/workflow/generate`): require `require_subscription`.
-- [ ] Return clear error (e.g. `subscription_required`) when user lacks access.
-- [ ] Free users can still call **`GET /api/published-recipes`**, save copies to their collection, etc.
+- [x] **`POST /api/workflow/generate`** requires `require_subscription` (and thus auth).
+- [x] Return clear error: 403 with `detail.code` **`subscription_required`** when user lacks access.
+- [x] Free users can still call **`GET /api/published-recipes`**, save copies, etc. (unchanged routes).
 
 **Deliverable**: Free users browse and save. Trial/subscribers access the full AI workflow (extraction + conversion). Stripe handles billing and trials.
 
@@ -435,7 +435,8 @@ subscription:
 ### A. Current Codebase Notes
 
 - **Auth (Phase 1)**: Firebase ID tokens — `get_current_user` / `get_current_user_optional` in `app/dependencies.py` verify Bearer tokens via Admin SDK; CORS and frontend API client are wired.
-- **Config**: Firebase project + service account paths and related settings in `app/config.py` (see `backend/.env.example`). Stripe vars added when implementing Phase 3.
+- **Config**: Firebase project + service account paths and related settings in `app/config.py` (see `backend/.env.example`). Stripe env vars are defined in `Settings` (§3.1), including Checkout/Portal redirect URLs.
+- **Subscriptions (Phase 3)**: `POST /api/subscription/checkout`, `/portal`; `POST /api/webhooks/stripe`; Firestore `users/{uid}/subscription/default` + `stripe_customers/{customerId}`; `require_subscription` on `POST /api/workflow/generate`.
 - **Workflow**: [`run_workflow()`](backend/app/services/agents/workflow.py) calls `recipe_extraction_workflow()` (cache read + extract), [`ensure_canonical_original_recipe()`](backend/app/services/save_flow.py) on miss, then **`convert_recipe()`** → **`ConvertedRecipe`**. **`POST /api/workflow/generate`** in [`routes/workflow.py`](backend/app/routes/workflow.py). **Save after workflow:** **`POST /api/users/me/saved-recipes/from-workflow`** with optional **`converted_recipe`** — [`save_from_workflow()`](backend/app/services/save_flow.py) ensures **`original_recipes`** create-on-miss only, then new **`saved_recipes`** row (§2.5.4).
 - **Models**: `UserRequest`, `UserAdjustments`, `OriginalRecipe`, **`OriginalRecipeDocument`**, `ConvertedRecipe`, **`SavedRecipe`**, etc. in `app/services/agents/models.py`. Extraction uses **`OriginalRecipe`** only; Firestore persistence uses **`OriginalRecipeDocument`** (canonical, shared) and **`SavedRecipe`** (per-user). Conversion agent consumes **`OriginalRecipe`** + **`UserRequest`** and outputs **`ConvertedRecipe`**.
 
@@ -457,7 +458,7 @@ feature/*     ──▶  Local dev only
 
 **Backend (add to pyproject.toml)**:
 - `firebase-admin`
-- `stripe`
+- `stripe` (added — Phase 3 webhook)
 - `google-cloud-firestore` (or use firebase-admin's Firestore)
 
 **Frontend**:
@@ -466,4 +467,4 @@ feature/*     ──▶  Local dev only
 
 ---
 
-*Document version: 1.6*
+*Document version: 1.8*
