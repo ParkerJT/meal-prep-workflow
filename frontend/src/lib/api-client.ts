@@ -12,6 +12,49 @@ export interface ApiClient {
   fetch<T>(path: string, options?: RequestInit): Promise<T>;
 }
 
+export class ApiError extends Error {
+  status: number;
+  body: unknown;
+
+  constructor(status: number, message: string, body: unknown = null) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.body = body;
+  }
+}
+
+async function parseErrorBody(res: Response): Promise<unknown> {
+  const contentType = res.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) {
+    try {
+      return await res.json();
+    } catch {
+      return null;
+    }
+  }
+
+  try {
+    const text = await res.text();
+    return text || null;
+  } catch {
+    return null;
+  }
+}
+
+function messageFromErrorBody(status: number, body: unknown): string {
+  if (body && typeof body === "object" && "detail" in body) {
+    const detail = (body as { detail?: unknown }).detail;
+    if (typeof detail === "string") return detail;
+    if (detail && typeof detail === "object" && "message" in detail) {
+      const message = (detail as { message?: unknown }).message;
+      if (typeof message === "string") return message;
+    }
+  }
+  if (typeof body === "string" && body.length > 0) return body;
+  return `HTTP ${status}`;
+}
+
 export function createApiClient(getToken: TokenGetter): ApiClient {
   return {
     async fetch<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -31,14 +74,24 @@ export function createApiClient(getToken: TokenGetter): ApiClient {
             ...options,
             headers: { ...headers, Authorization: `Bearer ${retryToken}` },
           });
-          if (!retryRes.ok) throw new Error(`HTTP ${retryRes.status}`);
+          if (!retryRes.ok) {
+            const retryBody = await parseErrorBody(retryRes);
+            throw new ApiError(
+              retryRes.status,
+              messageFromErrorBody(retryRes.status, retryBody),
+              retryBody
+            );
+          }
           if (retryRes.status === 204) return undefined as T;
           return retryRes.json();
         }
-        throw new Error("Unauthorized");
+        throw new ApiError(401, "Unauthorized");
       }
 
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const body = await parseErrorBody(res);
+        throw new ApiError(res.status, messageFromErrorBody(res.status, body), body);
+      }
       if (res.status === 204) return undefined as T;
       return res.json();
     },

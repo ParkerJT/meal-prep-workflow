@@ -35,12 +35,11 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 /** Wraps the app tree so descendants can use useAuth(). Subscribes to Firebase auth state. */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !!auth);
 
   /** Subscribe to auth state. Callback runs on load and whenever user signs in/out. */
   useEffect(() => {
     if (!auth) {
-      setLoading(false);
       return;
     }
 

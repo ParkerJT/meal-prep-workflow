@@ -2,13 +2,15 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/AuthContext";
 import { getAuthErrorMessage } from "@/lib/auth-errors";
 
 export default function SignInPage() {
   const { user, loading, signIn, signInWithGoogle } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const nextPath = searchParams.get("next") || "/";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -16,9 +18,9 @@ export default function SignInPage() {
 
   useEffect(() => {
     if (!loading && user) {
-      router.replace("/");
+      router.replace(nextPath);
     }
-  }, [user, loading, router]);
+  }, [user, loading, router, nextPath]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,7 +28,7 @@ export default function SignInPage() {
     setSubmitting(true);
     try {
       await signIn(email, password);
-      router.replace("/");
+      router.replace(nextPath);
     } catch (err) {
       setError(getAuthErrorMessage(err));
     } finally {
@@ -39,7 +41,7 @@ export default function SignInPage() {
     setSubmitting(true);
     try {
       await signInWithGoogle();
-      router.replace("/");
+      router.replace(nextPath);
     } catch (err) {
       setError(getAuthErrorMessage(err));
     } finally {

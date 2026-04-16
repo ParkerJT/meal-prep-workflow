@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/AuthContext";
+import { AppNav } from "@/lib/route-helpers";
 
 export default function HomePage() {
   const { user, loading, signOut, api } = useAuth();
@@ -82,6 +83,7 @@ export default function HomePage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-black px-4">
       <main className="flex flex-col items-center gap-8 text-center">
+        <AppNav />
         <h1 className="text-4xl font-extrabold tracking-tight text-neutral-50">
           Meal Prep Workflow
         </h1>
