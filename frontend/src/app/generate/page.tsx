@@ -1,10 +1,14 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { ApiError } from "@/lib/api-client";
-import { ConvertedRecipe } from "@/lib/frontend-types";
-import { AppNav, getErrorMessage, LoadingState, PageShell, useRequireAuth } from "@/lib/route-helpers";
+import { ConvertedRecipe, SubscriptionStatusResponse } from "@/lib/frontend-types";
+import { DashboardBackLink, getErrorMessage, LoadingState, PageShell, useRequireAuth } from "@/lib/route-helpers";
+import { TrialStatusBanner } from "@/lib/TrialStatusBanner";
+import { Button } from "@/components/ui/button";
+import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 
 interface WorkflowRequest {
   recipe_url: string;
@@ -25,7 +29,30 @@ export default function GeneratePage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [subscriptionRequired, setSubscriptionRequired] = useState(false);
+  const [subscription, setSubscription] = useState<SubscriptionStatusResponse | null>(null);
+  const [loadingSubscription, setLoadingSubscription] = useState(true);
+  const [selectingPlan, setSelectingPlan] = useState<"monthly" | "annual" | null>(null);
   const [result, setResult] = useState<ConvertedRecipe | null>(null);
+  const [saveNotes, setSaveNotes] = useState("");
+  const [savingResult, setSavingResult] = useState(false);
+  const [savedResultId, setSavedResultId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (loading || !isAuthenticated) return;
+    const loadSubscription = async () => {
+      setLoadingSubscription(true);
+      try {
+        await api.fetch<SubscriptionStatusResponse>("/api/subscription/start-trial", { method: "POST" });
+        const data = await api.fetch<SubscriptionStatusResponse>("/api/subscription/me");
+        setSubscription(data);
+      } catch {
+        setSubscription(null);
+      } finally {
+        setLoadingSubscription(false);
+      }
+    };
+    void loadSubscription();
+  }, [api, isAuthenticated, loading]);
 
   const handleGenerate = async (e: FormEvent) => {
     e.preventDefault();
@@ -33,6 +60,7 @@ export default function GeneratePage() {
     setError(null);
     setSubscriptionRequired(false);
     setResult(null);
+    setSavedResultId(null);
     try {
       const payload: WorkflowRequest = {
         recipe_url: recipeUrl.trim(),
@@ -58,7 +86,30 @@ export default function GeneratePage() {
     }
   };
 
-  const startTrial = async (plan: "monthly" | "annual") => {
+  const saveGeneratedRecipe = async () => {
+    if (!result) return;
+    setSavingResult(true);
+    setError(null);
+    try {
+      const data = await api.fetch<{ id: string }>("/api/users/me/saved-recipes/from-generate", {
+        method: "POST",
+        body: JSON.stringify({
+          source_url: recipeUrl.trim(),
+          notes: saveNotes,
+          converted_recipe: result,
+          published: false,
+        }),
+      });
+      setSavedResultId(data.id);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setSavingResult(false);
+    }
+  };
+
+  const choosePlan = async (plan: "monthly" | "annual") => {
+    setSelectingPlan(plan);
     setError(null);
     try {
       const data = await api.fetch<{ url: string }>("/api/subscription/checkout", {
@@ -68,98 +119,131 @@ export default function GeneratePage() {
       window.location.href = data.url;
     } catch (err) {
       setError(getErrorMessage(err));
+      setSelectingPlan(null);
     }
   };
 
   return (
     <PageShell>
-      <AppNav />
-      <h1 className="mb-2 text-3xl font-bold">Generate Recipe</h1>
-      <p className="mb-6 text-neutral-400">Paste a recipe URL and generate a macro-adjusted version.</p>
+      <DashboardBackLink />
+      <Card className="mb-6">
+        <CardTitle className="text-5xl">Generate Recipe</CardTitle>
+        <CardDescription className="mt-3 text-base">
+          Paste a recipe URL and generate a macro-adjusted version.
+        </CardDescription>
+      </Card>
 
       {loading && !isAuthenticated ? <LoadingState /> : null}
-      {error ? <p className="mb-4 rounded border border-red-700 bg-red-950 p-3 text-red-300">{error}</p> : null}
+      {!loadingSubscription ? (
+        <TrialStatusBanner subscription={subscription} selectingPlan={selectingPlan} onChoosePlan={choosePlan} />
+      ) : null}
+      {error ? (
+        <Card className="mb-4 bg-[#B84C2A]">
+          <p className="text-sm font-black uppercase tracking-[0.06em] text-black">{error}</p>
+        </Card>
+      ) : null}
 
-      <form onSubmit={handleGenerate} className="mb-6 space-y-4 rounded border border-neutral-800 bg-neutral-900 p-4">
-        <input
-          value={recipeUrl}
-          onChange={(e) => setRecipeUrl(e.target.value)}
-          required
-          placeholder="https://example.com/recipe or YouTube URL"
-          className="w-full rounded border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm"
-        />
+      <Card className="mb-6">
+        <form onSubmit={handleGenerate} className="space-y-4">
+          <Input
+            value={recipeUrl}
+            onChange={(e) => setRecipeUrl(e.target.value)}
+            required
+            placeholder="https://example.com/recipe or YouTube URL"
+            className="text-sm normal-case tracking-normal"
+          />
         <div className="grid gap-3 sm:grid-cols-3">
-          <label className="text-sm">
+          <label className="text-(--color-primary-text) text-sm font-bold uppercase tracking-[0.05em]">
             Servings
-            <input
+            <Input
               type="number"
               min={1}
               value={servings}
               onChange={(e) => setServings(Number(e.target.value))}
-              className="mt-1 w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1"
+              className="mt-1 px-2 py-1"
             />
           </label>
-          <label className="text-sm">
+          <label className="text-(--color-primary-text) text-sm font-bold uppercase tracking-[0.05em]">
             Calories
-            <input
+            <Input
               type="number"
               min={1}
               value={calories}
               onChange={(e) => setCalories(Number(e.target.value))}
-              className="mt-1 w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1"
+              className="mt-1 px-2 py-1"
             />
           </label>
-          <label className="text-sm">
+          <label className="text-(--color-primary-text) text-sm font-bold uppercase tracking-[0.05em]">
             Protein (g)
-            <input
+            <Input
               type="number"
               min={1}
               value={protein}
               onChange={(e) => setProtein(Number(e.target.value))}
-              className="mt-1 w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1"
+              className="mt-1 px-2 py-1"
             />
           </label>
         </div>
-        <button
+        <Button
           type="submit"
           disabled={submitting}
-          className="rounded bg-lime-500 px-4 py-2 text-sm font-semibold text-black hover:bg-lime-400 disabled:opacity-50"
+          className="text-sm"
         >
           {submitting ? "Generating..." : "Generate"}
-        </button>
+        </Button>
       </form>
+      </Card>
 
       {subscriptionRequired ? (
-        <div className="mb-6 rounded border border-amber-700 bg-amber-950 p-4">
-          <p className="mb-3 text-amber-200">A trial or active subscription is required to use recipe generation.</p>
+        <Card className="mb-6 bg-[#D47A4A]">
+          <p className="text-(--color-primary-text) mb-3 text-sm font-black uppercase tracking-[0.06em]">
+            Recipe generation is a premium feature. Choose a plan to continue.
+          </p>
           <div className="flex gap-3">
-            <button
-              onClick={() => void startTrial("monthly")}
-              className="rounded bg-amber-500 px-4 py-2 text-sm font-semibold text-black hover:bg-amber-400"
+            <Button
+              onClick={() => void choosePlan("monthly")}
+              className="text-sm"
             >
-              Start 14-day trial (monthly)
-            </button>
-            <button
-              onClick={() => void startTrial("annual")}
-              className="rounded border border-amber-500 px-4 py-2 text-sm font-semibold text-amber-300 hover:bg-amber-900"
+              Choose Monthly Plan
+            </Button>
+            <Button
+              onClick={() => void choosePlan("annual")}
+              variant="secondary"
+              className="text-sm"
             >
-              Start 14-day trial (annual)
-            </button>
+              Choose Annual Plan
+            </Button>
           </div>
-        </div>
+        </Card>
       ) : null}
 
       {result ? (
-        <section className="rounded border border-neutral-800 bg-neutral-900 p-5">
-          <h2 className="mb-1 text-xl font-semibold">{result.title}</h2>
-          <p className="mb-3 text-sm text-neutral-400">{result.description || "No description"}</p>
-          <p className="mb-3 text-sm text-neutral-300">
+        <Card>
+          <CardTitle className="text-4xl">{result.title}</CardTitle>
+          <p className="text-(--color-primary-text)/80 mb-3 mt-2 text-sm font-bold uppercase tracking-[0.04em]">
+            {result.description || "No description"}
+          </p>
+          <p className="text-(--color-primary-text) mb-3 text-sm font-bold uppercase tracking-[0.04em]">
             {result.servings} servings | {result.nutritional_info.calories} cal | {result.nutritional_info.protein}g protein
           </p>
-          <p className="text-xs text-neutral-500">
-            Save-to-collection from generate flow will be wired in the next UX phase endpoint integration.
-          </p>
-        </section>
+          <label className="text-(--color-primary-text) mb-2 block text-sm font-bold uppercase tracking-[0.05em]">
+            Optional notes
+            <textarea
+              value={saveNotes}
+              onChange={(e) => setSaveNotes(e.target.value)}
+              rows={3}
+              className="mt-1 w-full border-3 border-black bg-[#2B2B2B] px-3 py-2 text-sm font-semibold text-[#F5F5F5] outline-none focus:border-(--color-accent)"
+              placeholder="Add notes before saving..."
+            />
+          </label>
+          <Button
+            onClick={() => void saveGeneratedRecipe()}
+            disabled={savingResult || !!savedResultId}
+            className="text-sm"
+          >
+            {savedResultId ? "Saved To Collection" : savingResult ? "Saving..." : "Save To My Collection"}
+          </Button>
+        </Card>
       ) : null}
     </PageShell>
   );

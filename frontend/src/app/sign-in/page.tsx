@@ -5,6 +5,9 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/AuthContext";
 import { getAuthErrorMessage } from "@/lib/auth-errors";
+import { Button } from "@/components/ui/button";
+import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 
 export default function SignInPage() {
   const { user, loading, signIn, signInWithGoogle } = useAuth();
@@ -51,8 +54,8 @@ export default function SignInPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-black">
-        <p className="text-neutral-50">Loading...</p>
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <p className="text-(--color-primary-text) font-bold uppercase tracking-[0.08em]">Loading...</p>
       </div>
     );
   }
@@ -62,78 +65,82 @@ export default function SignInPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-black px-4">
-      <main className="w-full max-w-sm">
-        <h1 className="mb-8 text-3xl font-extrabold tracking-tight text-neutral-50">
-          Sign In
-        </h1>
+    <div className="bg-background flex min-h-screen flex-col items-center justify-center px-4">
+      <main className="w-full max-w-md">
+        <Card>
+          <p className="text-(--color-primary-text)/70 text-xs font-black uppercase tracking-[0.08em]">
+            Logo Placeholder
+          </p>
+          <div className="mt-2 border-3 border-dashed border-black bg-[#7B806A] p-3">
+            <p className="text-(--color-primary-text) text-xs font-bold uppercase tracking-[0.05em]">
+              Insert brand mark
+            </p>
+          </div>
+          <CardTitle>Sign In</CardTitle>
+          <CardDescription>Access your field ration workflow.</CardDescription>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <div>
-            <label htmlFor="email" className="mb-1 block text-sm font-medium text-neutral-300">
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              autoComplete="email"
-              className="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-4 py-2 text-neutral-50 placeholder-neutral-500 focus:border-lime-500 focus:outline-none focus:ring-1 focus:ring-lime-500"
-              placeholder="you@example.com"
-            />
+          <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4">
+            <div>
+              <label htmlFor="email" className="text-(--color-primary-text) mb-1 block text-xs font-black uppercase tracking-widest">
+                Email
+              </label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                autoComplete="email"
+                placeholder="you@example.com"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="password" className="text-(--color-primary-text) mb-1 block text-xs font-black uppercase tracking-widest">
+                Password
+              </label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                autoComplete="current-password"
+              />
+            </div>
+
+            {error && (
+              <p className="text-(--color-error) text-sm font-bold uppercase tracking-[0.06em]">{error}</p>
+            )}
+
+            <Button type="submit" disabled={submitting} className="w-full">
+              {submitting ? "Signing In..." : "Sign In"}
+            </Button>
+          </form>
+
+          <div className="my-4 flex items-center gap-4">
+            <div className="h-[3px] flex-1 bg-black" />
+            <span className="text-(--color-primary-text) text-xs font-black uppercase tracking-widest">or</span>
+            <div className="h-[3px] flex-1 bg-black" />
           </div>
 
-          <div>
-            <label htmlFor="password" className="mb-1 block text-sm font-medium text-neutral-300">
-              Password
-            </label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              autoComplete="current-password"
-              className="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-4 py-2 text-neutral-50 placeholder-neutral-500 focus:border-lime-500 focus:outline-none focus:ring-1 focus:ring-lime-500"
-            />
-          </div>
-
-          {error && (
-            <p className="text-sm text-red-500">{error}</p>
-          )}
-
-          <button
-            type="submit"
+          <Button
+            type="button"
+            onClick={handleGoogleSignIn}
             disabled={submitting}
-            className="rounded-lg bg-lime-500 px-4 py-2 font-bold text-black transition-colors hover:bg-lime-400 disabled:opacity-50"
+            variant="secondary"
+            className="w-full"
           >
-            {submitting ? "Signing in..." : "Sign In"}
-          </button>
-        </form>
+            Sign In With Google
+          </Button>
 
-        <div className="my-4 flex items-center gap-4">
-          <div className="h-px flex-1 bg-neutral-700" />
-          <span className="text-sm text-neutral-500">or</span>
-          <div className="h-px flex-1 bg-neutral-700" />
-        </div>
-
-        <button
-          type="button"
-          onClick={handleGoogleSignIn}
-          disabled={submitting}
-          className="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-4 py-2 font-medium text-neutral-50 transition-colors hover:bg-neutral-800 disabled:opacity-50"
-        >
-          Sign in with Google
-        </button>
-
-        <p className="mt-6 text-center text-sm text-neutral-400">
-          Don&apos;t have an account?{" "}
-          <Link href="/sign-up" className="font-medium text-lime-500 hover:text-lime-400">
-            Sign up
-          </Link>
-        </p>
+          <p className="text-(--color-primary-text) mt-6 text-center text-sm font-bold uppercase tracking-[0.06em]">
+            Don&apos;t have an account?{" "}
+            <Link href="/sign-up" className="underline decoration-3 underline-offset-2">
+              Sign Up
+            </Link>
+          </p>
+        </Card>
       </main>
     </div>
   );

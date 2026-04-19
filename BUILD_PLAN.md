@@ -265,7 +265,7 @@ When a user **copies a published recipe**:
 ### 3.1 Stripe Setup
 
 - [x] Create Stripe account. Create products: Monthly Plan, Annual Plan (Stripe Dashboard).
-- [x] Apply **14-day trial** when creating the Checkout Session (`subscription_data.trial_period_days: 14`) — implemented in `POST /api/subscription/checkout`.
+- [x] Offer a **14-day no-card app-managed trial** for new signups via `POST /api/subscription/start-trial`; users choose monthly/annual later during checkout.
 - [ ] Store Stripe secret key and webhook secret in **GCP Secret Manager** (staging/production); local dev uses `backend/.env` only.
 - [ ] Deployed environments: Stripe **test mode** keys for staging, **live mode** for production.
 
@@ -298,10 +298,10 @@ Implementation: [`backend/app/services/firestore/subscription.py`](backend/app/s
 
 ### 3.4 Trial Logic
 
-- [x] When user starts trial: Create Stripe Checkout with `subscription_data.trial_period_days: 14`.
+- [x] On authenticated signup/first session: initialize app-managed `trialing` status with `trial_end = now + 14 days` when no subscription record exists.
 - [x] Webhook handlers persist `status` and `trial_end` from Stripe Subscription objects.
-- [x] `require_subscription` allows access when `status in ["active", "trialing"]`.
-- [x] After trial ends without payment: Stripe moves subscription status; backend reflects via webhooks; `require_subscription` denies when not `active`/`trialing`.
+- [x] `require_subscription` allows generation for `active` users and only for `trialing` users whose `trial_end` is still in the future.
+- [x] After trial ends without payment: backend treats user as free tier for generation (trial expired), while keeping saved/public recipe access available.
 
 ### 3.5 AI Workflow Gating
 
@@ -319,31 +319,31 @@ Implementation: [`backend/app/services/firestore/subscription.py`](backend/app/s
 
 ### 4.1 Pages & Routes
 
-- [ ] **/** — Landing page. CTA to sign up or sign in.
-- [ ] **/sign-in**, **/sign-up** — Auth pages.
-- [ ] **/dashboard** — User's saved recipes. Auth required.
-- [ ] **/recipes** — Browse **published** recipes (from `GET /api/published-recipes`). Pagination, search (if implemented).
-- [ ] **/recipes/[ownerUserId]/[savedRecipeId]** — Published recipe detail (or equivalent id scheme matching the API). Show "Save to collection" if logged in (creates a **copy** with provenance). Show **notes** only when viewing **your own** saved recipe (e.g. from dashboard), not when viewing another user's published recipe.
-- [ ] **/generate** — AI workflow: URL input, loading state, result. Gated for trial/subscribers.
-- [ ] **/settings** or **/account** — Subscription management (link to Stripe Customer Portal), account info.
+- [x] **/** — Landing page. CTA to sign up or sign in.
+- [x] **/sign-in**, **/sign-up** — Auth pages.
+- [x] **/dashboard** — User's saved recipes. Auth required.
+- [x] **/recipes** — Browse **published** recipes (from `GET /api/published-recipes`). Pagination, search (if implemented).
+- [x] **/recipes/[ownerUserId]/[savedRecipeId]** — Published recipe detail (or equivalent id scheme matching the API). Show "Save to collection" if logged in (creates a **copy** with provenance). Show **notes** only when viewing **your own** saved recipe (e.g. from dashboard), not when viewing another user's published recipe.
+- [x] **/generate** — AI workflow: URL input, loading state, result. Gated for trial/subscribers.
+- [x] **/settings** or **/account** — Subscription management (link to Stripe Customer Portal), account info.
 
 ### 4.2 Auth Flow
 
-- [ ] Protected route wrapper (redirect to sign-in if not authenticated).
-- [ ] Token refresh: use `onIdTokenChanged` or refresh before API calls.
-- [ ] Persist auth state across reloads (Firebase handles this by default).
+- [x] Protected route wrapper (redirect to sign-in if not authenticated).
+- [x] Token refresh: use `onIdTokenChanged` or refresh before API calls.
+- [x] Persist auth state across reloads (Firebase handles this by default).
 
 ### 4.3 Subscription UX
 
-- [ ] On `/generate` for free users: show "Start 14-day free trial" CTA. Redirect to Stripe Checkout.
-- [ ] For trial/subscribers: show remaining trial days or plan info.
-- [ ] Link to Customer Portal for managing subscription.
+- [x] On `/generate` and `/settings`: show trial countdown + plan selection CTA; trial starts automatically (no card) and checkout is used only to choose monthly/annual.
+- [x] For trial/subscribers: show remaining trial days or plan info.
+- [x] Link to Customer Portal for managing subscription.
 
 ### 4.4 Recipe UX
 
-- [ ] Dashboard: list saved recipes with notes preview. Link to detail.
-- [ ] Recipe detail: edit notes inline or in modal.
-- [ ] After AI extraction: "Save to collection" button with optional notes field.
+- [x] Dashboard: list saved recipes with notes preview. Link to detail.
+- [x] Recipe detail: edit notes inline or in modal.
+- [x] After AI extraction: "Save to my collection" button with optional notes field.
 
 **Deliverable**: Complete user flows for auth, browsing, saving, AI generation, and subscription.
 

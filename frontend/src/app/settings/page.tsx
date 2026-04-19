@@ -1,15 +1,38 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/AuthContext";
-import { AppNav, getErrorMessage, LoadingState, PageShell, useRequireAuth } from "@/lib/route-helpers";
+import { SubscriptionStatusResponse } from "@/lib/frontend-types";
+import { TrialStatusBanner } from "@/lib/TrialStatusBanner";
+import { DashboardBackLink, getErrorMessage, LoadingState, PageShell, useRequireAuth } from "@/lib/route-helpers";
+import { Button } from "@/components/ui/button";
+import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 
 export default function SettingsPage() {
   const { api, user } = useAuth();
   const { loading, isAuthenticated } = useRequireAuth();
   const [openingPortal, setOpeningPortal] = useState(false);
-  const [startingTrial, setStartingTrial] = useState<"monthly" | "annual" | null>(null);
+  const [selectingPlan, setSelectingPlan] = useState<"monthly" | "annual" | null>(null);
+  const [subscription, setSubscription] = useState<SubscriptionStatusResponse | null>(null);
+  const [loadingSubscription, setLoadingSubscription] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (loading || !isAuthenticated) return;
+    const loadSubscription = async () => {
+      setLoadingSubscription(true);
+      try {
+        await api.fetch<SubscriptionStatusResponse>("/api/subscription/start-trial", { method: "POST" });
+        const data = await api.fetch<SubscriptionStatusResponse>("/api/subscription/me");
+        setSubscription(data);
+      } catch (err) {
+        setError(getErrorMessage(err));
+      } finally {
+        setLoadingSubscription(false);
+      }
+    };
+    void loadSubscription();
+  }, [api, isAuthenticated, loading]);
 
   const openPortal = async () => {
     setOpeningPortal(true);
@@ -24,8 +47,8 @@ export default function SettingsPage() {
     }
   };
 
-  const startTrial = async (plan: "monthly" | "annual") => {
-    setStartingTrial(plan);
+  const choosePlan = async (plan: "monthly" | "annual") => {
+    setSelectingPlan(plan);
     setError(null);
     try {
       const data = await api.fetch<{ url: string }>("/api/subscription/checkout", {
@@ -35,50 +58,53 @@ export default function SettingsPage() {
       window.location.href = data.url;
     } catch (err) {
       setError(getErrorMessage(err));
-      setStartingTrial(null);
+      setSelectingPlan(null);
     }
   };
 
   return (
     <PageShell>
-      <AppNav />
-      <h1 className="mb-2 text-3xl font-bold">Settings</h1>
+      <DashboardBackLink />
+      <Card className="mb-5">
+        <CardTitle className="text-5xl">Settings</CardTitle>
+        <CardDescription className="mt-3 text-base">Account and subscription controls.</CardDescription>
+      </Card>
       {loading && !isAuthenticated ? <LoadingState /> : null}
-      {error ? <p className="mb-4 rounded border border-red-700 bg-red-950 p-3 text-red-300">{error}</p> : null}
+      {error ? (
+        <Card className="mb-4 bg-[#B84C2A]">
+          <p className="text-sm font-black uppercase tracking-[0.06em] text-black">{error}</p>
+        </Card>
+      ) : null}
 
-      <section className="mb-5 rounded border border-neutral-800 bg-neutral-900 p-4">
-        <h2 className="mb-2 text-lg font-semibold">Account</h2>
-        <p className="text-sm text-neutral-400">Email: {user?.email || "Unavailable"}</p>
-        <p className="text-sm text-neutral-400">UID: {user?.uid || "Unavailable"}</p>
-      </section>
+      <Card className="mb-5">
+        <CardTitle className="text-4xl">Account</CardTitle>
+        <p className="text-(--color-primary-text)/80 mt-3 text-sm font-bold uppercase tracking-[0.05em]">
+          Email: {user?.email || "Unavailable"}
+        </p>
+        <p className="text-(--color-primary-text)/80 text-sm font-bold uppercase tracking-[0.05em]">
+          UID: {user?.uid || "Unavailable"}
+        </p>
+      </Card>
 
-      <section className="rounded border border-neutral-800 bg-neutral-900 p-4">
-        <h2 className="mb-3 text-lg font-semibold">Subscription</h2>
-        <div className="mb-3 flex flex-wrap gap-3">
-          <button
-            onClick={() => void startTrial("monthly")}
-            disabled={!!startingTrial}
-            className="rounded bg-lime-500 px-4 py-2 text-sm font-semibold text-black hover:bg-lime-400 disabled:opacity-50"
-          >
-            {startingTrial === "monthly" ? "Redirecting..." : "Start trial (monthly)"}
-          </button>
-          <button
-            onClick={() => void startTrial("annual")}
-            disabled={!!startingTrial}
-            className="rounded border border-lime-500 px-4 py-2 text-sm font-semibold text-lime-300 hover:bg-lime-950 disabled:opacity-50"
-          >
-            {startingTrial === "annual" ? "Redirecting..." : "Start trial (annual)"}
-          </button>
-        </div>
+      <Card>
+        <CardTitle className="text-4xl">Subscription</CardTitle>
+        {loadingSubscription ? (
+          <p className="text-(--color-primary-text)/80 mb-3 mt-3 text-sm font-bold uppercase tracking-[0.05em]">
+            Loading subscription status...
+          </p>
+        ) : (
+          <TrialStatusBanner subscription={subscription} selectingPlan={selectingPlan} onChoosePlan={choosePlan} className="mb-3" />
+        )}
 
-        <button
+        <Button
           onClick={() => void openPortal()}
           disabled={openingPortal}
-          className="rounded border border-neutral-600 px-4 py-2 text-sm text-neutral-200 hover:bg-neutral-800 disabled:opacity-50"
+          variant="secondary"
+          className="text-sm"
         >
-          {openingPortal ? "Opening portal..." : "Manage subscription in Stripe portal"}
-        </button>
-      </section>
+          {openingPortal ? "Opening Portal..." : "Manage Subscription In Stripe Portal"}
+        </Button>
+      </Card>
     </PageShell>
   );
 }

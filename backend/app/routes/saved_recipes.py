@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.dependencies import get_current_uid, get_firestore
 from app.schemas.recipes import (
+    GeneratedSaveCreate,
     SavedRecipeCreate,
     SavedRecipeResponse,
     SavedRecipeUpdate,
@@ -9,8 +10,10 @@ from app.schemas.recipes import (
 )
 from app.services.agents.models import SavedRecipe
 from app.services import save_flow
+from app.services.firestore import original_recipes as original_svc
 from app.services.firestore import saved_recipes as saved_svc
 from app.services.firestore.timestamps import utc_now
+from app.services.recipe_id import compute_recipe_id, normalize_source_url
 
 router = APIRouter(prefix="/api/users/me/saved-recipes", tags=["saved-recipes"])
 
@@ -66,6 +69,36 @@ def create_saved_from_workflow(
         notes=body.notes,
         published=body.published,
     )
+    return _to_response(doc_id, sr)
+
+
+@router.post("/from-generate", response_model=SavedRecipeResponse, status_code=201)
+def create_saved_from_generate(
+    body: GeneratedSaveCreate,
+    uid: str = Depends(get_current_uid),
+    db=Depends(get_firestore),
+):
+    normalized = normalize_source_url(body.source_url)
+    recipe_id = compute_recipe_id(normalized)
+    if original_svc.get_original_recipe(db, recipe_id) is None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Canonical original recipe not found for source_url. "
+                "Run /api/workflow/generate first and retry save."
+            ),
+        )
+
+    recipe = SavedRecipe(
+        recipe_id=recipe_id,
+        saved_at=utc_now(),
+        notes=body.notes,
+        converted_recipe=body.converted_recipe,
+        published=body.published,
+        copied_from_user_id=None,
+        copied_from_saved_recipe_id=None,
+    )
+    doc_id, sr = saved_svc.create_saved(db, uid, recipe)
     return _to_response(doc_id, sr)
 
 

@@ -9,8 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.config import Settings
 from app.dependencies import get_current_uid, get_firestore
-from app.schemas.subscription import CheckoutPlanBody
-from app.services.firestore.subscription import get_subscription
+from app.schemas.subscription import CheckoutPlanBody, SubscriptionStatusResponse
+from app.services.firestore.subscription import ensure_signup_trial, get_subscription
 
 router = APIRouter(prefix="/api/subscription", tags=["subscription"])
 settings = Settings()
@@ -47,7 +47,7 @@ def create_checkout_session(
     body: CheckoutPlanBody,
     uid: str = Depends(get_current_uid),
 ) -> dict[str, str]:
-    """Create a Stripe Checkout Session (subscription + 14-day trial). Returns checkout URL."""
+    """Create a Stripe Checkout Session for selected paid plan. Returns checkout URL."""
     _require_stripe()
     _require_checkout_urls()
 
@@ -71,10 +71,7 @@ def create_checkout_session(
             cancel_url=settings.STRIPE_CHECKOUT_CANCEL_URL.strip(),
             client_reference_id=uid,
             metadata={"firebase_uid": uid},
-            subscription_data={
-                "trial_period_days": 14,
-                "metadata": {"firebase_uid": uid},
-            },
+            subscription_data={"metadata": {"firebase_uid": uid}},
         )
     except stripe.StripeError as e:
         raise HTTPException(
@@ -91,6 +88,44 @@ def create_checkout_session(
     return {"url": url}
 
 
+@router.post("/start-trial", response_model=SubscriptionStatusResponse)
+def start_signup_trial(
+    uid: str = Depends(get_current_uid),
+    db: Any = Depends(get_firestore),
+) -> SubscriptionStatusResponse:
+    """
+    Start 14-day no-card trial for new users only.
+    Idempotent: returns existing subscription document unchanged when present.
+    """
+    sub = ensure_signup_trial(db, uid)
+    return SubscriptionStatusResponse(
+        status=sub.status,
+        plan=sub.plan,
+        current_period_end=sub.current_period_end,
+        trial_started_at=sub.trial_started_at,
+        trial_end=sub.trial_end,
+        source=sub.source,
+    )
+
+
+@router.get("/me", response_model=SubscriptionStatusResponse)
+def get_my_subscription_status(
+    uid: str = Depends(get_current_uid),
+    db: Any = Depends(get_firestore),
+) -> SubscriptionStatusResponse:
+    sub = get_subscription(db, uid)
+    if not sub:
+        return SubscriptionStatusResponse(status="none")
+    return SubscriptionStatusResponse(
+        status=sub.status,
+        plan=sub.plan,
+        current_period_end=sub.current_period_end,
+        trial_started_at=sub.trial_started_at,
+        trial_end=sub.trial_end,
+        source=sub.source,
+    )
+
+
 @router.post("/portal")
 def create_billing_portal_session(
     uid: str = Depends(get_current_uid),
@@ -104,7 +139,7 @@ def create_billing_portal_session(
     if not sub or not sub.stripe_customer_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="No Stripe customer found. Subscribe via checkout first.",
+            detail="No billing profile found yet. Choose a paid plan first.",
         )
 
     try:

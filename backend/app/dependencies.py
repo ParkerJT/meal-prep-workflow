@@ -2,6 +2,7 @@
 Firebase auth dependencies.
 """
 
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import Depends, HTTPException, status
@@ -70,10 +71,17 @@ async def require_subscription(
     current_user: dict = Depends(get_current_user),
     db: Any = Depends(get_firestore),
 ) -> dict:
-    """Allow only users with an active or trialing subscription (Phase 3)."""
+    """Allow only users with active paid status or an unexpired trial."""
     uid = current_user["uid"]
     sub = get_subscription(db, uid)
-    if sub is None or sub.status not in ("active", "trialing"):
+    allowed = False
+    if sub is not None:
+        if sub.status == "active":
+            allowed = True
+        elif sub.status == "trialing" and sub.trial_end is not None:
+            allowed = sub.trial_end > datetime.now(timezone.utc)
+
+    if not allowed:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={

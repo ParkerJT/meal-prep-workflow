@@ -40,3 +40,16 @@ export interface PaginatedPublishedResponse {
   items: PublishedRecipeSummary[];
   next_cursor: string | null;
 }
+
+export type SubscriptionStatus = "active" | "trialing" | "past_due" | "canceled" | "none";
+export type SubscriptionPlan = "monthly" | "annual";
+export type SubscriptionSource = "app_trial" | "stripe";
+
+export interface SubscriptionStatusResponse {
+  status: SubscriptionStatus;
+  plan: SubscriptionPlan | null;
+  current_period_end: string | null;
+  trial_end: string | null;
+  trial_started_at?: string | null;
+  source?: SubscriptionSource | null;
+}

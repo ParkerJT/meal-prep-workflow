@@ -61,6 +61,15 @@ class WorkflowSaveCreate(BaseModel):
     published: bool = False
 
 
+class GeneratedSaveCreate(BaseModel):
+    """Create a saved recipe after /workflow/generate using canonical recipe id from source_url."""
+
+    source_url: str
+    notes: str = ""
+    converted_recipe: ConvertedRecipe | None = None
+    published: bool = False
+
+
 class PublishedRecipeSummary(BaseModel):
     owner_user_id: str
     saved_recipe_id: str

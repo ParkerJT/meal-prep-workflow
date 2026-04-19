@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
 
 from app.config import Settings
@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 SUBSCRIPTION_SUBCOLLECTION = "subscription"
 SUBSCRIPTION_DOC_ID = "default"
 STRIPE_CUSTOMERS_COLLECTION = "stripe_customers"
+SIGNUP_TRIAL_DAYS = 14
 
 
 def _subscription_ref(db: Any, uid: str):
@@ -51,6 +52,35 @@ def get_subscription(db: Any, uid: str) -> UserSubscription | None:
         return None
     data = deep_convert_firestore_data(snap.to_dict() or {})
     return UserSubscription.model_validate(data)
+
+
+def ensure_signup_trial(
+    db: Any,
+    uid: str,
+    now: datetime | None = None,
+) -> UserSubscription:
+    """
+    Create an app-managed signup trial for new users if no subscription record exists.
+    Idempotent: existing records are returned unchanged.
+    """
+    existing = get_subscription(db, uid)
+    if existing is not None:
+        return existing
+
+    current = now or datetime.now(timezone.utc)
+    trial_end = current + timedelta(days=SIGNUP_TRIAL_DAYS)
+    rec = UserSubscription(
+        stripe_customer_id=None,
+        stripe_subscription_id=None,
+        status="trialing",
+        plan=None,
+        current_period_end=None,
+        trial_started_at=current,
+        trial_end=trial_end,
+        source="app_trial",
+    )
+    _upsert_subscription_doc(db, uid, rec)
+    return rec
 
 
 def _upsert_subscription_doc(db: Any, uid: str, sub: UserSubscription) -> None:
@@ -131,7 +161,9 @@ def upsert_subscription_from_stripe_subscription(
         status=status,
         plan=plan,
         current_period_end=current_period_end,
+        trial_started_at=_unix_ts_to_dt(stripe_sub.get("trial_start")),
         trial_end=trial_end,
+        source="stripe",
     )
     _upsert_subscription_doc(db, uid, rec)
 
@@ -148,7 +180,9 @@ def mark_subscription_canceled(db: Any, uid: str, stripe_customer_id: str) -> No
                 status="canceled",
                 plan=existing.plan,
                 current_period_end=existing.current_period_end,
+                trial_started_at=existing.trial_started_at,
                 trial_end=existing.trial_end,
+                source=existing.source,
             ),
         )
     else:
@@ -161,7 +195,9 @@ def mark_subscription_canceled(db: Any, uid: str, stripe_customer_id: str) -> No
                 status="canceled",
                 plan=None,
                 current_period_end=None,
+                trial_started_at=None,
                 trial_end=None,
+                source="stripe",
             ),
         )
 

@@ -4,7 +4,10 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { PaginatedPublishedResponse, PublishedRecipeSummary } from "@/lib/frontend-types";
-import { AppNav, getErrorMessage, LoadingState, PageShell } from "@/lib/route-helpers";
+import { Button } from "@/components/ui/button";
+import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { DashboardBackLink, getErrorMessage, LoadingState, PageShell } from "@/lib/route-helpers";
 
 export default function RecipesPage() {
   const { api } = useAuth();
@@ -46,43 +49,53 @@ export default function RecipesPage() {
 
   return (
     <PageShell>
-      <AppNav />
-      <h1 className="mb-2 text-3xl font-bold">Published Recipes</h1>
-      <p className="mb-4 text-neutral-400">Browse published community recipes.</p>
+      <DashboardBackLink />
+      <Card className="mb-4">
+        <CardTitle className="text-5xl">Published Recipes</CardTitle>
+        <CardDescription className="mt-3 text-base">Browse published community recipes.</CardDescription>
+      </Card>
 
-      <input
+      <Input
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         placeholder="Search by recipe title (client-side stub)"
-        className="mb-6 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 placeholder-neutral-500"
+        className="mb-6 text-sm normal-case tracking-normal"
       />
 
       {fetching ? <LoadingState label="Loading published recipes..." /> : null}
-      {error ? <p className="mb-4 rounded border border-red-700 bg-red-950 p-3 text-red-300">{error}</p> : null}
+      {error ? (
+        <Card className="mb-4 bg-[#B84C2A]">
+          <p className="text-sm font-black uppercase tracking-[0.06em] text-black">{error}</p>
+        </Card>
+      ) : null}
 
       <ul className="space-y-3">
         {filteredItems.map((item) => (
-          <li key={`${item.owner_user_id}-${item.saved_recipe_id}`} className="rounded border border-neutral-800 bg-neutral-900 p-4">
-            <h2 className="font-semibold text-neutral-100">{item.converted_recipe?.title || "Untitled recipe"}</h2>
-            <p className="mb-2 text-xs text-neutral-500">Published {new Date(item.saved_at).toLocaleString()}</p>
-            <Link
-              href={`/recipes/${item.owner_user_id}/${item.saved_recipe_id}`}
-              className="text-sm font-medium text-lime-400 hover:text-lime-300"
-            >
-              View details
-            </Link>
+          <li key={`${item.owner_user_id}-${item.saved_recipe_id}`}>
+            <Card>
+              <h2 className="text-(--color-primary-text) font-heading text-3xl uppercase tracking-[0.05em]">
+                {item.converted_recipe?.title || "Untitled Recipe"}
+              </h2>
+              <p className="text-(--color-primary-text)/70 mb-3 text-xs font-bold uppercase tracking-[0.04em]">
+                Published {new Date(item.saved_at).toLocaleString()}
+              </p>
+              <Link href={`/recipes/${item.owner_user_id}/${item.saved_recipe_id}`}>
+                <Button className="text-sm">View Details</Button>
+              </Link>
+            </Card>
           </li>
         ))}
       </ul>
 
       {cursor ? (
-        <button
+        <Button
           onClick={() => void loadPublished(cursor)}
           disabled={loadingMore}
-          className="mt-6 rounded border border-neutral-700 px-4 py-2 text-sm text-neutral-200 hover:bg-neutral-800 disabled:opacity-50"
+          variant="secondary"
+          className="mt-6 text-sm"
         >
-          {loadingMore ? "Loading..." : "Load more"}
-        </button>
+          {loadingMore ? "Loading..." : "Load More"}
+        </Button>
       ) : null}
     </PageShell>
   );
