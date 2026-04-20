@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/AuthContext";
 import { getAuthErrorMessage } from "@/lib/auth-errors";
@@ -63,12 +64,17 @@ export default function SignUpPage() {
       <main className="w-full max-w-md">
         <Card>
           <p className="text-(--color-primary-text)/70 text-xs font-black uppercase tracking-[0.08em]">
-            Logo Placeholder
+            Brand Logo
           </p>
-          <div className="mt-2 border-3 border-dashed border-black bg-[#7B806A] p-3">
-            <p className="text-(--color-primary-text) text-xs font-bold uppercase tracking-[0.05em]">
-              Insert brand mark
-            </p>
+          <div className="mt-2 border-3 border-black bg-[#7B806A] p-3">
+            <Image
+              src="/branding/mmp-logo-primary.svg"
+              alt="Major Meal Prep logo"
+              width={420}
+              height={120}
+              className="h-auto w-full max-w-xs"
+              priority
+            />
           </div>
           <CardTitle>Sign Up</CardTitle>
           <CardDescription>Build your prep account and deploy.</CardDescription>
