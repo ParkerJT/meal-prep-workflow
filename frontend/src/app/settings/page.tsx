@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { SubscriptionStatusResponse } from "@/lib/frontend-types";
 import { TrialStatusBanner } from "@/lib/TrialStatusBanner";
-import { DashboardBackLink, getErrorMessage, LoadingState, PageShell, useRequireAuth } from "@/lib/route-helpers";
+import { getErrorMessage, LoadingState, LoggedInUtilityHeader, PageShell, useRequireAuth } from "@/lib/route-helpers";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 
@@ -63,8 +63,8 @@ export default function SettingsPage() {
   };
 
   return (
-    <PageShell>
-      <DashboardBackLink />
+    <PageShell showLoggedInHeader={false}>
+      <LoggedInUtilityHeader />
       <Card className="mb-5">
         <CardTitle className="text-5xl">Settings</CardTitle>
         <CardDescription className="mt-3 text-base">Account and subscription controls.</CardDescription>

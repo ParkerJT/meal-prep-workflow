@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { ApiError } from "@/lib/api-client";
 import { ConvertedRecipe, SubscriptionStatusResponse } from "@/lib/frontend-types";
-import { DashboardBackLink, getErrorMessage, LoadingState, PageShell, useRequireAuth } from "@/lib/route-helpers";
+import { getErrorMessage, LoadingState, LoggedInUtilityHeader, PageShell, useRequireAuth } from "@/lib/route-helpers";
 import { TrialStatusBanner } from "@/lib/TrialStatusBanner";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
@@ -124,8 +124,8 @@ export default function GeneratePage() {
   };
 
   return (
-    <PageShell>
-      <DashboardBackLink />
+    <PageShell showLoggedInHeader={false}>
+      <LoggedInUtilityHeader />
       <Card className="mb-6">
         <CardTitle className="text-5xl">Generate Recipe</CardTitle>
         <CardDescription className="mt-3 text-base">

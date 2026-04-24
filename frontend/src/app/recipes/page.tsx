@@ -7,7 +7,7 @@ import { PaginatedPublishedResponse, PublishedRecipeSummary } from "@/lib/fronte
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { DashboardBackLink, getErrorMessage, LoadingState, PageShell } from "@/lib/route-helpers";
+import { getErrorMessage, LoadingState, LoggedInUtilityHeader, PageShell } from "@/lib/route-helpers";
 
 export default function RecipesPage() {
   const { api } = useAuth();
@@ -48,8 +48,8 @@ export default function RecipesPage() {
   }, [items, search]);
 
   return (
-    <PageShell>
-      <DashboardBackLink />
+    <PageShell showLoggedInHeader={false}>
+      <LoggedInUtilityHeader />
       <Card className="mb-4">
         <CardTitle className="text-5xl">Published Recipes</CardTitle>
         <CardDescription className="mt-3 text-base">Browse published community recipes.</CardDescription>

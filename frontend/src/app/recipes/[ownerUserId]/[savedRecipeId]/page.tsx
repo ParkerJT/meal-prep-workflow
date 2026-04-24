@@ -6,7 +6,7 @@ import { ApiError } from "@/lib/api-client";
 import { PublishedRecipeDetail, SavedRecipeResponse } from "@/lib/frontend-types";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
-import { DashboardBackLink, getErrorMessage, LoadingState, PageShell } from "@/lib/route-helpers";
+import { getErrorMessage, LoadingState, LoggedInUtilityHeader, PageShell } from "@/lib/route-helpers";
 
 interface RecipeDetailPageProps {
   params: Promise<{
@@ -171,8 +171,8 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
   };
 
   return (
-    <PageShell>
-      <DashboardBackLink />
+    <PageShell showLoggedInHeader={false}>
+      <LoggedInUtilityHeader />
       {fetching ? <LoadingState label="Loading recipe..." /> : null}
       {error ? (
         <Card className="mb-4 bg-[#B84C2A]">

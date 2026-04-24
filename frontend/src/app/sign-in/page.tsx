@@ -69,19 +69,24 @@ export default function SignInPage() {
     <div className="bg-background flex min-h-screen flex-col items-center justify-center px-4">
       <main className="w-full max-w-md">
         <Card>
-          <p className="text-(--color-primary-text)/70 text-xs font-black uppercase tracking-[0.08em]">
-            Brand Logo
-          </p>
-          <div className="mt-2 border-3 border-black bg-[#7B806A] p-3">
-            <Image
-              src="/branding/mmp-logo-primary.svg"
-              alt="Major Meal Prep logo"
-              width={420}
-              height={120}
-              className="h-auto w-full max-w-xs"
-              priority
-            />
+          <div className="mb-3 flex justify-center">
+            <Link href="/" aria-label="Go to homepage" className="inline-flex">
+              <Image
+                src="/branding/mmp-logo-primary.svg"
+                alt="Major Meal Prep logo"
+                width={420}
+                height={120}
+                className="h-auto w-full max-w-[220px]"
+                priority
+              />
+            </Link>
           </div>
+          <p className="mb-5 text-center text-[11px] font-black uppercase tracking-[0.08em] text-(--color-primary-text)/60">
+            <Link href="/" className="underline decoration-3 underline-offset-2">
+              Back To Home
+            </Link>
+          </p>
+          <div className="mb-6 h-[3px] w-full bg-black/25" />
           <CardTitle>Sign In</CardTitle>
           <CardDescription>Access your field ration workflow.</CardDescription>
 
