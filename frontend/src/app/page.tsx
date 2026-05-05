@@ -206,7 +206,7 @@ export default function HomePage() {
                 Your Recipe Library, Organized
               </p>
               <p className="text-(--color-primary-text)/85 mt-2 text-sm">
-                Save converted recipes to your personal collection. Browse community-published plans for inspiration.
+                Save converted recipes to your personal collection. Browse the community recipe collection for inspiration.
                 Build a go-to library you can rely on week after week.
               </p>
             </div>
@@ -296,7 +296,7 @@ export default function HomePage() {
                 Free Account
               </p>
               <ul className="mt-2 space-y-1 text-sm text-(--color-primary-text)/85">
-                <li>Browse community-published recipes</li>
+                <li>Browse the community recipe collection</li>
                 <li>Save recipes to your collection</li>
                 <li>No AI recipe generation</li>
               </ul>
@@ -307,7 +307,7 @@ export default function HomePage() {
               <ul className="mt-2 space-y-1 text-sm text-(--color-primary-text)/85">
                 <li>Unlimited AI recipe conversions</li>
                 <li>Full macro calibration tools</li>
-                <li>Personal recipe library + community access</li>
+                <li>Personal recipe library + community recipe collection</li>
               </ul>
               <p className="text-(--color-primary-text) mt-3 text-sm font-black uppercase tracking-[0.05em]">
                 [Price] / month after 14-day free trial

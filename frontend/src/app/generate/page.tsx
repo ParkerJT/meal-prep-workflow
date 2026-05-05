@@ -221,11 +221,63 @@ export default function GeneratePage() {
         <Card>
           <CardTitle className="text-4xl">{result.title}</CardTitle>
           <p className="text-(--color-primary-text)/80 mb-3 mt-2 text-sm font-bold uppercase tracking-[0.04em]">
-            {result.description || "No description"}
+            {result.description?.trim() || "No description available for this recipe."}
           </p>
-          <p className="text-(--color-primary-text) mb-3 text-sm font-bold uppercase tracking-[0.04em]">
-            {result.servings} servings | {result.nutritional_info.calories} cal | {result.nutritional_info.protein}g protein
-          </p>
+          <div className="mb-4 grid gap-2 border-3 border-black bg-[#2B2B2B] p-3 text-sm text-[#F5F5F5] sm:grid-cols-2">
+            <p>
+              <span className="font-black uppercase tracking-[0.04em] text-[#BDBDBD]">Servings:</span>{" "}
+              {result.servings ?? "Unknown"}
+            </p>
+            <p>
+              <span className="font-black uppercase tracking-[0.04em] text-[#BDBDBD]">Calories:</span>{" "}
+              {result.nutritional_info?.calories ?? "Unknown"}
+            </p>
+            <p>
+              <span className="font-black uppercase tracking-[0.04em] text-[#BDBDBD]">Protein:</span>{" "}
+              {result.nutritional_info?.protein ?? "Unknown"}g
+            </p>
+          </div>
+
+          <h2 className="font-heading text-(--color-primary-text) mb-2 text-4xl uppercase tracking-[0.05em]">Ingredients</h2>
+          {result.ingredients?.length ? (
+            <div className="mb-4 overflow-hidden border-3 border-black">
+              <div className="grid grid-cols-[100px_120px_1fr] bg-[#2B2B2B] px-3 py-2 text-xs font-black uppercase tracking-wide text-[#BDBDBD]">
+                <span>Quantity</span>
+                <span>Unit</span>
+                <span>Ingredient</span>
+              </div>
+              <ul className="divide-y divide-black">
+                {result.ingredients.map((ingredient, idx) => (
+                  <li
+                    key={`${ingredient.name}-${idx}`}
+                    className="text-(--color-primary-text) grid grid-cols-[100px_120px_1fr] bg-(--color-surface) px-3 py-2 text-sm font-semibold"
+                  >
+                    <span>{ingredient.quantity}</span>
+                    <span>{ingredient.unit || "-"}</span>
+                    <span>{ingredient.name}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <p className="text-(--color-primary-text)/70 mb-4 text-sm font-bold uppercase tracking-[0.04em]">
+              No ingredients listed for this recipe.
+            </p>
+          )}
+
+          <h2 className="font-heading text-(--color-primary-text) mb-2 text-4xl uppercase tracking-[0.05em]">Instructions</h2>
+          {result.instructions?.length ? (
+            <ol className="text-(--color-primary-text) mb-4 list-decimal space-y-1 pl-6 text-sm font-semibold">
+              {result.instructions.map((step, idx) => (
+                <li key={`step-${idx}`}>{step}</li>
+              ))}
+            </ol>
+          ) : (
+            <p className="text-(--color-primary-text)/70 mb-4 text-sm font-bold uppercase tracking-[0.04em]">
+              No instructions listed for this recipe.
+            </p>
+          )}
+
           <label className="text-(--color-primary-text) mb-2 block text-sm font-bold uppercase tracking-[0.05em]">
             Optional notes
             <textarea

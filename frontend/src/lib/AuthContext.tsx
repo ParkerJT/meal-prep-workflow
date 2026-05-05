@@ -69,6 +69,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = useCallback(async () => {
     if (!auth) return;
     await firebaseSignOut(auth);
+    window.location.assign("/");
   }, []);
 
   /** Returns ID token for API calls. Pass forceRefresh: true after a 401 to retry with a fresh token. */

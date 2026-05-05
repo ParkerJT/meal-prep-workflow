@@ -51,8 +51,10 @@ export default function RecipesPage() {
     <PageShell showLoggedInHeader={false}>
       <LoggedInUtilityHeader />
       <Card className="mb-4">
-        <CardTitle className="text-5xl">Published Recipes</CardTitle>
-        <CardDescription className="mt-3 text-base">Browse published community recipes.</CardDescription>
+        <CardTitle className="text-5xl">Community Recipe Collection</CardTitle>
+        <CardDescription className="mt-3 text-base">
+          Browse recipes shared by the community. Save any recipe to your personal collection.
+        </CardDescription>
       </Card>
 
       <Input
@@ -62,7 +64,7 @@ export default function RecipesPage() {
         className="mb-6 text-sm normal-case tracking-normal"
       />
 
-      {fetching ? <LoadingState label="Loading published recipes..." /> : null}
+      {fetching ? <LoadingState label="Loading community recipes..." /> : null}
       {error ? (
         <Card className="mb-4 bg-[#B84C2A]">
           <p className="text-sm font-black uppercase tracking-[0.06em] text-black">{error}</p>
@@ -77,7 +79,7 @@ export default function RecipesPage() {
                 {item.converted_recipe?.title || "Untitled Recipe"}
               </h2>
               <p className="text-(--color-primary-text)/70 mb-3 text-xs font-bold uppercase tracking-[0.04em]">
-                Published {new Date(item.saved_at).toLocaleString()}
+                Shared {new Date(item.saved_at).toLocaleString()}
               </p>
               <Link href={`/recipes/${item.owner_user_id}/${item.saved_recipe_id}`}>
                 <Button className="text-sm">View Details</Button>

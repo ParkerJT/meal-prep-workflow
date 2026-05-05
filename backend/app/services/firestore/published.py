@@ -32,6 +32,7 @@ def list_published(
     *,
     limit: int,
     cursor: str | None,
+    exclude_owner_user_id: str | None = None,
 ) -> tuple[list[dict], str | None]:
     """
     Returns rows with owner_user_id, saved_recipe_id, saved_at, converted_recipe (no notes).
@@ -70,6 +71,8 @@ def list_published(
         data = deep_convert_firestore_data(doc.to_dict() or {})
         data.pop("notes", None)
         sr = SavedRecipe.model_validate(data)
+        if exclude_owner_user_id and owner_user_id == exclude_owner_user_id:
+            continue
         rows.append(
             {
                 "owner_user_id": owner_user_id,

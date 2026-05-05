@@ -11,7 +11,11 @@ import { getErrorMessage, LoadingState, PageShell, useRequireAuth } from "@/lib/
 
 const RECIPES_PER_PAGE = 16;
 
-type StatusFilter = "all" | "published" | "private";
+function isCommunitySaved(recipe: SavedRecipeResponse): boolean {
+  return !!(recipe.copied_from_user_id && recipe.copied_from_saved_recipe_id);
+}
+
+type StatusFilter = "all" | "published" | "private" | "community";
 type DateFilter = "all" | "30d" | "90d" | "year";
 type SortOption = "newest" | "oldest" | "az" | "za";
 
@@ -58,8 +62,10 @@ export default function DashboardPage() {
     };
 
     const filtered = recipes.filter((recipe) => {
-      if (statusFilter === "published" && !recipe.published) return false;
-      if (statusFilter === "private" && recipe.published) return false;
+      const community = isCommunitySaved(recipe);
+      if (statusFilter === "published" && (!recipe.published || community)) return false;
+      if (statusFilter === "private" && (recipe.published || community)) return false;
+      if (statusFilter === "community" && !community) return false;
 
       if (dateFilter !== "all") {
         const savedAt = new Date(recipe.saved_at).getTime();
@@ -142,7 +148,7 @@ export default function DashboardPage() {
               </Link>
               <Link href="/recipes">
                 <Button variant="secondary" className="px-6 py-3 text-base">
-                  Browse Recipes
+                  Browse Community Recipes
                 </Button>
               </Link>
             </div>
@@ -200,6 +206,7 @@ export default function DashboardPage() {
               <option value="all">All</option>
               <option value="published">Published</option>
               <option value="private">Private</option>
+              <option value="community">Community</option>
             </select>
           </label>
 
@@ -250,7 +257,7 @@ export default function DashboardPage() {
       {!fetching && !error && recipes.length === 0 ? (
         <Card>
           <p className="text-sm font-bold uppercase tracking-[0.04em] text-(--color-primary-text)/80">
-            No saved recipes yet. Try browsing published recipes or generating one.
+            No saved recipes yet. Try browsing the community recipe collection or generating one.
           </p>
         </Card>
       ) : null}
@@ -287,7 +294,7 @@ export default function DashboardPage() {
                       <Button className="text-xs">View</Button>
                     </Link>
                     <span className="text-[10px] font-black uppercase tracking-[0.08em] text-(--color-primary-text)/70">
-                      {recipe.published ? "Published" : "Private"}
+                      {isCommunitySaved(recipe) ? "Community" : recipe.published ? "Published" : "Private"}
                     </span>
                   </div>
                 </Card>
