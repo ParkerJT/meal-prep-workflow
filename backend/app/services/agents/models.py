@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 # User adjustments packaged
 class UserAdjustments(BaseModel):
@@ -62,13 +62,18 @@ class ConvertedRecipe(BaseModel):
 
 # Firestore document shape for users/{userId}/saved_recipes/{savedRecipeId}
 class SavedRecipe(BaseModel):
-    recipe_id: str  # original_recipes doc id
+    original_recipe_id: str  # original_recipes doc id
     saved_at: datetime
     notes: str = ""
     converted_recipe: ConvertedRecipe | None = None
-    published: bool = False
-    copied_from_user_id: str | None = None
-    copied_from_saved_recipe_id: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _backfill_original_recipe_id(cls, data):
+        if isinstance(data, dict) and "original_recipe_id" not in data and "recipe_id" in data:
+            data = dict(data)
+            data["original_recipe_id"] = data["recipe_id"]
+        return data
 
 
 def original_recipe_from_document(doc: OriginalRecipeDocument) -> OriginalRecipe:

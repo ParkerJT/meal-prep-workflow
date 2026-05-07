@@ -21,13 +21,10 @@ router = APIRouter(prefix="/api/users/me/saved-recipes", tags=["saved-recipes"])
 def _to_response(doc_id: str, sr: SavedRecipe) -> SavedRecipeResponse:
     return SavedRecipeResponse(
         id=doc_id,
-        recipe_id=sr.recipe_id,
+        original_recipe_id=sr.original_recipe_id,
         saved_at=sr.saved_at,
         notes=sr.notes,
         converted_recipe=sr.converted_recipe,
-        published=sr.published,
-        copied_from_user_id=sr.copied_from_user_id,
-        copied_from_saved_recipe_id=sr.copied_from_saved_recipe_id,
     )
 
 
@@ -67,7 +64,6 @@ def create_saved_from_workflow(
         original_recipe=body.original_recipe,
         converted_recipe=body.converted_recipe,
         notes=body.notes,
-        published=body.published,
     )
     return _to_response(doc_id, sr)
 
@@ -79,8 +75,8 @@ def create_saved_from_generate(
     db=Depends(get_firestore),
 ):
     normalized = normalize_source_url(body.source_url)
-    recipe_id = compute_recipe_id(normalized)
-    if original_svc.get_original_recipe(db, recipe_id) is None:
+    original_recipe_id = compute_recipe_id(normalized)
+    if original_svc.get_original_recipe(db, original_recipe_id) is None:
         raise HTTPException(
             status_code=409,
             detail=(
@@ -90,13 +86,10 @@ def create_saved_from_generate(
         )
 
     recipe = SavedRecipe(
-        recipe_id=recipe_id,
+        original_recipe_id=original_recipe_id,
         saved_at=utc_now(),
         notes=body.notes,
         converted_recipe=body.converted_recipe,
-        published=body.published,
-        copied_from_user_id=None,
-        copied_from_saved_recipe_id=None,
     )
     doc_id, sr = saved_svc.create_saved(db, uid, recipe)
     return _to_response(doc_id, sr)
@@ -108,28 +101,11 @@ def create_my_saved_recipe(
     uid: str = Depends(get_current_uid),
     db=Depends(get_firestore),
 ):
-    if body.source_owner_user_id and body.source_saved_recipe_id:
-        try:
-            doc_id, sr = saved_svc.copy_from_published(
-                db,
-                uid,
-                source_owner_user_id=body.source_owner_user_id,
-                source_saved_recipe_id=body.source_saved_recipe_id,
-                notes=body.notes,
-            )
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e)) from e
-        return _to_response(doc_id, sr)
-
-    assert body.recipe_id is not None
     recipe = SavedRecipe(
-        recipe_id=body.recipe_id,
+        original_recipe_id=body.original_recipe_id,
         saved_at=utc_now(),
         notes=body.notes,
         converted_recipe=body.converted_recipe,
-        published=body.published,
-        copied_from_user_id=None,
-        copied_from_saved_recipe_id=None,
     )
     doc_id, sr = saved_svc.create_saved(db, uid, recipe)
     return _to_response(doc_id, sr)
@@ -142,18 +118,14 @@ def patch_my_saved_recipe(
     uid: str = Depends(get_current_uid),
     db=Depends(get_firestore),
 ):
-    try:
-        row = saved_svc.patch_saved(
-            db,
-            uid,
-            saved_recipe_id,
-            notes=body.notes,
-            converted_recipe=body.converted_recipe,
-            published=body.published,
-            recipe_id=body.recipe_id,
-        )
-    except PermissionError as e:
-        raise HTTPException(status_code=403, detail=str(e)) from e
+    row = saved_svc.patch_saved(
+        db,
+        uid,
+        saved_recipe_id,
+        notes=body.notes,
+        converted_recipe=body.converted_recipe,
+        original_recipe_id=body.original_recipe_id,
+    )
     if row is None:
         raise HTTPException(status_code=404, detail="Saved recipe not found")
     doc_id, sr = row

@@ -16,13 +16,10 @@ def test_save_from_workflow_calls_upsert_when_no_original():
         instructions=["Mix."],
     )
     saved = SavedRecipe(
-        recipe_id="rid",
+        original_recipe_id="rid",
         saved_at=datetime.now(timezone.utc),
         notes="",
         converted_recipe=None,
-        published=False,
-        copied_from_user_id=None,
-        copied_from_saved_recipe_id=None,
     )
 
     with (
@@ -51,13 +48,10 @@ def test_save_from_workflow_skips_upsert_when_original_exists():
         instructions=["Mix."],
     )
     saved = SavedRecipe(
-        recipe_id="rid",
+        original_recipe_id="rid",
         saved_at=datetime.now(timezone.utc),
         notes="",
         converted_recipe=None,
-        published=False,
-        copied_from_user_id=None,
-        copied_from_saved_recipe_id=None,
     )
     existing = MagicMock()
 

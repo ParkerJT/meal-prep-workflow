@@ -1,13 +1,4 @@
 {
-  "indexes": [
-    {
-      "collectionGroup": "saved_recipes",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        { "fieldPath": "published", "order": "ASCENDING" },
-        { "fieldPath": "saved_at", "order": "DESCENDING" }
-      ]
-    }
-  ],
+  "indexes": [],
   "fieldOverrides": []
 }

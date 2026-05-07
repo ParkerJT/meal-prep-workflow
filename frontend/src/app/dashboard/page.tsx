@@ -11,11 +11,6 @@ import { getErrorMessage, LoadingState, PageShell, useRequireAuth } from "@/lib/
 
 const RECIPES_PER_PAGE = 16;
 
-function isCommunitySaved(recipe: SavedRecipeResponse): boolean {
-  return !!(recipe.copied_from_user_id && recipe.copied_from_saved_recipe_id);
-}
-
-type StatusFilter = "all" | "published" | "private" | "community";
 type DateFilter = "all" | "30d" | "90d" | "year";
 type SortOption = "newest" | "oldest" | "az" | "za";
 
@@ -26,7 +21,6 @@ export default function DashboardPage() {
   const [fetching, setFetching] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [dateFilter, setDateFilter] = useState<DateFilter>("all");
   const [sortBy, setSortBy] = useState<SortOption>("newest");
   const [currentPage, setCurrentPage] = useState(1);
@@ -50,7 +44,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [dateFilter, searchQuery, sortBy, statusFilter]);
+  }, [dateFilter, searchQuery, sortBy]);
 
   const filteredSortedRecipes = useMemo(() => {
     const search = searchQuery.trim().toLowerCase();
@@ -62,18 +56,13 @@ export default function DashboardPage() {
     };
 
     const filtered = recipes.filter((recipe) => {
-      const community = isCommunitySaved(recipe);
-      if (statusFilter === "published" && (!recipe.published || community)) return false;
-      if (statusFilter === "private" && (recipe.published || community)) return false;
-      if (statusFilter === "community" && !community) return false;
-
       if (dateFilter !== "all") {
         const savedAt = new Date(recipe.saved_at).getTime();
         if (!Number.isFinite(savedAt) || savedAt < dateThresholdByFilter[dateFilter]) return false;
       }
 
       if (search) {
-        const title = (recipe.converted_recipe?.title || `Recipe ${recipe.recipe_id}`).toLowerCase();
+        const title = (recipe.converted_recipe?.title || `Recipe ${recipe.original_recipe_id}`).toLowerCase();
         const notes = (recipe.notes || "").toLowerCase();
         return title.includes(search) || notes.includes(search);
       }
@@ -82,8 +71,8 @@ export default function DashboardPage() {
     });
 
     return filtered.sort((a, b) => {
-      const aTitle = (a.converted_recipe?.title || `Recipe ${a.recipe_id}`).toLowerCase();
-      const bTitle = (b.converted_recipe?.title || `Recipe ${b.recipe_id}`).toLowerCase();
+      const aTitle = (a.converted_recipe?.title || `Recipe ${a.original_recipe_id}`).toLowerCase();
+      const bTitle = (b.converted_recipe?.title || `Recipe ${b.original_recipe_id}`).toLowerCase();
       const aSaved = new Date(a.saved_at).getTime();
       const bSaved = new Date(b.saved_at).getTime();
 
@@ -99,7 +88,7 @@ export default function DashboardPage() {
           return bSaved - aSaved;
       }
     });
-  }, [dateFilter, recipes, searchQuery, sortBy, statusFilter]);
+  }, [dateFilter, recipes, searchQuery, sortBy]);
 
   const totalFiltered = filteredSortedRecipes.length;
   const totalPages = Math.max(1, Math.ceil(totalFiltered / RECIPES_PER_PAGE));
@@ -146,11 +135,6 @@ export default function DashboardPage() {
               <Link href="/generate">
                 <Button className="px-6 py-3 text-base">Generate Recipe</Button>
               </Link>
-              <Link href="/recipes">
-                <Button variant="secondary" className="px-6 py-3 text-base">
-                  Browse Community Recipes
-                </Button>
-              </Link>
             </div>
             <div className="mt-4 flex flex-wrap gap-3">
               <Link href="/settings">
@@ -192,22 +176,6 @@ export default function DashboardPage() {
               placeholder="Search title or notes..."
               className="w-full border-3 border-black bg-background px-3 py-2 text-sm font-bold uppercase tracking-[0.03em] outline-none"
             />
-          </label>
-
-          <label className="block">
-            <span className="mb-1 block text-xs font-black uppercase tracking-[0.08em] text-(--color-primary-text)/75">
-              Status
-            </span>
-            <select
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
-              className="w-full border-3 border-black bg-background px-3 py-2 text-sm font-bold uppercase tracking-[0.03em] outline-none"
-            >
-              <option value="all">All</option>
-              <option value="published">Published</option>
-              <option value="private">Private</option>
-              <option value="community">Community</option>
-            </select>
           </label>
 
           <label className="block">
@@ -257,7 +225,7 @@ export default function DashboardPage() {
       {!fetching && !error && recipes.length === 0 ? (
         <Card>
           <p className="text-sm font-bold uppercase tracking-[0.04em] text-(--color-primary-text)/80">
-            No saved recipes yet. Try browsing the community recipe collection or generating one.
+            No saved recipes yet. Generate one to get started.
           </p>
         </Card>
       ) : null}
@@ -278,7 +246,7 @@ export default function DashboardPage() {
                 <Card className="flex h-full flex-col bg-(--color-surface)">
                   <div className="mb-2 flex items-start justify-between gap-3">
                     <h2 className="max-h-[3.2rem] overflow-hidden text-(--color-primary-text) font-heading text-xl leading-tight tracking-[0.04em] uppercase">
-                      {recipe.converted_recipe?.title || `Recipe ${recipe.recipe_id}`}
+                      {recipe.converted_recipe?.title || `Recipe ${recipe.original_recipe_id}`}
                     </h2>
                   </div>
                   <span className="mb-3 text-xs font-bold uppercase tracking-[0.04em] text-(--color-primary-text)/65">
@@ -290,12 +258,9 @@ export default function DashboardPage() {
                       : "No notes added."}
                   </p>
                   <div className="mt-auto flex items-center justify-between gap-2">
-                    <Link href={`/recipes/${user?.uid}/${recipe.id}`}>
+                    <Link href={`/saved-recipes/${recipe.id}`}>
                       <Button className="text-xs">View</Button>
                     </Link>
-                    <span className="text-[10px] font-black uppercase tracking-[0.08em] text-(--color-primary-text)/70">
-                      {isCommunitySaved(recipe) ? "Community" : recipe.published ? "Published" : "Private"}
-                    </span>
                   </div>
                 </Card>
               </li>

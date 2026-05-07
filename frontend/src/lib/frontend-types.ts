@@ -16,29 +16,10 @@ export interface ConvertedRecipe {
 
 export interface SavedRecipeResponse {
   id: string;
-  recipe_id: string;
+  original_recipe_id: string;
   saved_at: string;
   notes: string;
   converted_recipe: ConvertedRecipe | null;
-  published: boolean;
-  copied_from_user_id: string | null;
-  copied_from_saved_recipe_id: string | null;
-}
-
-export interface PublishedRecipeSummary {
-  owner_user_id: string;
-  saved_recipe_id: string;
-  saved_at: string;
-  converted_recipe: ConvertedRecipe | null;
-}
-
-export interface PublishedRecipeDetail extends PublishedRecipeSummary {
-  recipe_id: string;
-}
-
-export interface PaginatedPublishedResponse {
-  items: PublishedRecipeSummary[];
-  next_cursor: string | null;
 }
 
 export type SubscriptionStatus = "active" | "trialing" | "past_due" | "canceled" | "none";

@@ -97,7 +97,6 @@ export default function GeneratePage() {
           source_url: recipeUrl.trim(),
           notes: saveNotes,
           converted_recipe: result,
-          published: false,
         }),
       });
       setSavedResultId(data.id);

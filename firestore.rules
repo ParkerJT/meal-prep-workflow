@@ -1,7 +1,6 @@
 rules_version = '2';
 
 // Client SDK rules. Backend uses Admin SDK and bypasses these.
-// Public reads of published recipes are served only via FastAPI (Admin SDK).
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -12,7 +11,6 @@ service cloud.firestore {
     }
 
     // Per-user saves — owner may read/write their own subcollection.
-    // Strangers do not read published rows here; use the API for discovery.
     match /users/{userId}/saved_recipes/{savedRecipeId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }

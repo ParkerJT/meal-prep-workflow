@@ -10,7 +10,6 @@ from app.services.firestore import saved_recipes as saved_svc
 from app.services.firestore.timestamps import utc_now
 from app.services.recipe_id import compute_recipe_id, normalize_source_url
 
-
 def infer_source_type(url: str) -> Literal["web", "youtube"]:
     """Match extraction routing: YouTube hosts vs everything else we treat as web."""
     if url.startswith("https://www.youtube.com") or url.startswith("https://youtu.be"):
@@ -31,12 +30,12 @@ def ensure_canonical_original_recipe(
     Used after generate/extraction so LLM extraction cost is retained (§2.5.3).
     """
     normalized = normalize_source_url(source_url)
-    recipe_id = compute_recipe_id(normalized)
-    if original_svc.get_original_recipe(db, recipe_id) is not None:
+    original_recipe_id = compute_recipe_id(normalized)
+    if original_svc.get_original_recipe(db, original_recipe_id) is not None:
         return
     st = source_type if source_type is not None else infer_source_type(source_url)
     doc = OriginalRecipeDocument(
-        id=recipe_id,
+        id=original_recipe_id,
         title=original_recipe.title,
         description=original_recipe.description,
         servings=original_recipe.servings,
@@ -59,7 +58,6 @@ def save_from_workflow(
     original_recipe: OriginalRecipe,
     converted_recipe: ConvertedRecipe | None = None,
     notes: str = "",
-    published: bool = False,
 ) -> tuple[str, SavedRecipe]:
     """
     Ensure canonical ``original_recipes/{recipe_id}`` exists (create on miss only), then
@@ -77,12 +75,9 @@ def save_from_workflow(
     )
 
     sr = SavedRecipe(
-        recipe_id=recipe_id,
+        original_recipe_id=recipe_id,
         saved_at=utc_now(),
         notes=notes,
         converted_recipe=converted_recipe,
-        published=published,
-        copied_from_user_id=None,
-        copied_from_saved_recipe_id=None,
     )
     return saved_svc.create_saved(db, uid, sr)
