@@ -43,14 +43,14 @@ export function LoggedInUtilityHeader({
   const { signOut } = useAuth();
 
   return (
-    <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+    <div className="sticky top-0 z-20 -mx-4 mb-5 flex flex-wrap items-center justify-between gap-3 border-b-3 border-black bg-background/95 px-4 py-2 backdrop-blur supports-backdrop-filter:bg-background/80 print:hidden">
       <Link href="/dashboard" className="inline-flex">
         <Image
           src="/branding/mmp-icon-full.png"
           alt="Major Meal Prep logo"
           width={72}
           height={72}
-          className="h-auto w-16 sm:w-18"
+          className="h-auto w-12 sm:w-14"
           priority
         />
       </Link>
@@ -68,18 +68,29 @@ export function LoggedInUtilityHeader({
   );
 }
 
+export type PageShellMaxWidth = "4xl" | "5xl" | "6xl" | "7xl";
+
+const pageShellMaxWidthClass: Record<PageShellMaxWidth, string> = {
+  "4xl": "max-w-4xl",
+  "5xl": "max-w-5xl",
+  "6xl": "max-w-6xl",
+  "7xl": "max-w-7xl",
+};
+
 export function PageShell({
   children,
   showLoggedInHeader = true,
+  maxWidth = "4xl",
 }: {
   children: React.ReactNode;
   showLoggedInHeader?: boolean;
+  maxWidth?: PageShellMaxWidth;
 }) {
   const { user } = useAuth();
 
   return (
-    <div className="bg-background min-h-screen px-4 py-10 text-(--color-primary-text)">
-      <main className="mx-auto w-full max-w-4xl">
+    <div className="bg-background min-h-screen pb-10 pt-4 text-(--color-primary-text)">
+      <main className={`mx-auto w-full px-4 ${pageShellMaxWidthClass[maxWidth]}`}>
         {user && showLoggedInHeader ? (
           <Card className="mb-6">
             <div className="flex flex-wrap items-center gap-3">

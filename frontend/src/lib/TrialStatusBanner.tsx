@@ -26,20 +26,35 @@ export function TrialStatusBanner({
   const trialDaysRemaining = getTrialDaysRemaining(subscription);
   const isExpiredTrial = subscription?.status === "trialing" && trialDaysRemaining === 0;
   const isPaid = subscription?.status === "active";
+  const isCanceled = subscription?.status === "canceled";
   const showUpgradeCta = !isPaid;
 
   return (
     <Card className={`mb-4 ${className}`.trim()}>
-      <p className="text-(--color-primary-text) text-sm font-black uppercase tracking-[0.05em]">
-        Status: {subscription?.status || "none"}
-      </p>
-      <p className="text-(--color-primary-text) text-sm font-black uppercase tracking-[0.05em]">
-        Plan: {subscription?.plan || "none"}
-      </p>
+      {!isCanceled ? (
+        <>
+          <p className="text-(--color-primary-text) text-sm font-black uppercase tracking-[0.05em]">
+            Status: {subscription?.status || "none"}
+          </p>
+          <p className="text-(--color-primary-text) text-sm font-black uppercase tracking-[0.05em]">
+            Plan: {subscription?.plan || "none"}
+          </p>
+        </>
+      ) : null}
       {subscription?.status === "trialing" ? (
         <p className="text-(--color-primary-text) text-sm font-black uppercase tracking-[0.05em]">
           Trial days remaining: {trialDaysRemaining ?? "unknown"}
         </p>
+      ) : null}
+      {isCanceled ? (
+        <div className="mt-3 space-y-2">
+          <p className="text-sm font-black uppercase tracking-[0.05em] text-[#A83E1B]">
+            Your subscription has been canceled.
+          </p>
+          <p className="text-(--color-primary-text)/90 text-sm font-bold leading-snug normal-case tracking-normal">
+            Pick a plan below to resubscribe.
+          </p>
+        </div>
       ) : null}
       {isExpiredTrial ? (
         <p className="mt-2 text-sm font-black uppercase tracking-[0.05em] text-[#A83E1B]">
@@ -53,7 +68,11 @@ export function TrialStatusBanner({
             disabled={!!selectingPlan}
             className="px-3 py-1.5 text-xs"
           >
-            {selectingPlan === "monthly" ? "Redirecting..." : "Choose Monthly Plan"}
+            {selectingPlan === "monthly"
+              ? "Redirecting..."
+              : isCanceled
+                ? "Resubscribe — Monthly"
+                : "Choose Monthly Plan"}
           </Button>
           <Button
             onClick={() => void onChoosePlan("annual")}
@@ -61,7 +80,11 @@ export function TrialStatusBanner({
             variant="secondary"
             className="px-3 py-1.5 text-xs"
           >
-            {selectingPlan === "annual" ? "Redirecting..." : "Choose Annual Plan"}
+            {selectingPlan === "annual"
+              ? "Redirecting..."
+              : isCanceled
+                ? "Resubscribe — Annual"
+                : "Choose Annual Plan"}
           </Button>
         </div>
       ) : null}

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import stripe
@@ -10,10 +11,25 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.config import Settings
 from app.dependencies import get_current_uid, get_firestore
 from app.schemas.subscription import CheckoutPlanBody, SubscriptionStatusResponse
-from app.services.firestore.subscription import ensure_signup_trial, get_subscription
+from app.services.firestore.subscription import (
+    clear_stale_stripe_customer_link,
+    ensure_signup_trial,
+    get_subscription,
+)
 
 router = APIRouter(prefix="/api/subscription", tags=["subscription"])
 settings = Settings()
+logger = logging.getLogger(__name__)
+
+
+def _stripe_customer_not_found_error(err: stripe.StripeError) -> bool:
+    """True when a Stripe call failed because the customer id does not exist."""
+    code = getattr(err, "code", None)
+    param = getattr(err, "param", None)
+    if code == "resource_missing" and param == "customer":
+        return True
+    body = str(err).lower()
+    return "no such customer" in body
 
 
 def _require_stripe() -> None:
@@ -46,6 +62,7 @@ def _require_portal_return_url() -> None:
 def create_checkout_session(
     body: CheckoutPlanBody,
     uid: str = Depends(get_current_uid),
+    db: Any = Depends(get_firestore),
 ) -> dict[str, str]:
     """Create a Stripe Checkout Session for selected paid plan. Returns checkout URL."""
     _require_stripe()
@@ -63,21 +80,49 @@ def create_checkout_session(
             detail=f"STRIPE_PRICE_{body.plan.upper()} not configured",
         )
 
+    existing = get_subscription(db, uid)
+    stripe_customer_id = (
+        (existing.stripe_customer_id or "").strip()
+        if existing
+        else ""
+    )
+
+    session_kwargs: dict[str, Any] = {
+        "mode": "subscription",
+        "line_items": [{"price": price_id, "quantity": 1}],
+        "success_url": settings.STRIPE_CHECKOUT_SUCCESS_URL.strip(),
+        "cancel_url": settings.STRIPE_CHECKOUT_CANCEL_URL.strip(),
+        "client_reference_id": uid,
+        "metadata": {"firebase_uid": uid},
+        "subscription_data": {"metadata": {"firebase_uid": uid}},
+    }
+    if stripe_customer_id:
+        session_kwargs["customer"] = stripe_customer_id
+
     try:
-        session = stripe.checkout.Session.create(
-            mode="subscription",
-            line_items=[{"price": price_id, "quantity": 1}],
-            success_url=settings.STRIPE_CHECKOUT_SUCCESS_URL.strip(),
-            cancel_url=settings.STRIPE_CHECKOUT_CANCEL_URL.strip(),
-            client_reference_id=uid,
-            metadata={"firebase_uid": uid},
-            subscription_data={"metadata": {"firebase_uid": uid}},
-        )
+        session = stripe.checkout.Session.create(**session_kwargs)
     except stripe.StripeError as e:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Stripe error: {getattr(e, 'user_message', None) or str(e)}",
-        ) from e
+        if stripe_customer_id and _stripe_customer_not_found_error(e):
+            logger.info(
+                "checkout: clearing stale Stripe customer %s for uid %s; retrying without customer",
+                stripe_customer_id,
+                uid,
+            )
+            clear_stale_stripe_customer_link(db, uid, stripe_customer_id)
+            retry_kwargs = dict(session_kwargs)
+            retry_kwargs.pop("customer", None)
+            try:
+                session = stripe.checkout.Session.create(**retry_kwargs)
+            except stripe.StripeError as e2:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"Stripe error: {getattr(e2, 'user_message', None) or str(e2)}",
+                ) from e2
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Stripe error: {getattr(e, 'user_message', None) or str(e)}",
+            ) from e
 
     url = session.get("url") if isinstance(session, dict) else getattr(session, "url", None)
     if not url:
@@ -105,6 +150,7 @@ def start_signup_trial(
         trial_started_at=sub.trial_started_at,
         trial_end=sub.trial_end,
         source=sub.source,
+        billing_portal_available=bool(sub.stripe_customer_id),
     )
 
 
@@ -123,6 +169,7 @@ def get_my_subscription_status(
         trial_started_at=sub.trial_started_at,
         trial_end=sub.trial_end,
         source=sub.source,
+        billing_portal_available=bool(sub.stripe_customer_id),
     )
 
 
@@ -142,12 +189,24 @@ def create_billing_portal_session(
             detail="No billing profile found yet. Choose a paid plan first.",
         )
 
+    customer_id = (sub.stripe_customer_id or "").strip()
     try:
         session = stripe.billing_portal.Session.create(
-            customer=sub.stripe_customer_id,
+            customer=customer_id,
             return_url=settings.STRIPE_BILLING_PORTAL_RETURN_URL.strip(),
         )
     except stripe.StripeError as e:
+        if customer_id and _stripe_customer_not_found_error(e):
+            logger.info(
+                "portal: clearing stale Stripe customer %s for uid %s",
+                customer_id,
+                uid,
+            )
+            clear_stale_stripe_customer_link(db, uid, customer_id)
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Your billing profile is no longer on file. Choose a plan to subscribe again.",
+            ) from e
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Stripe error: {getattr(e, 'user_message', None) or str(e)}",

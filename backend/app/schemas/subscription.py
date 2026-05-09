@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 SubscriptionStatus = Literal["active", "trialing", "past_due", "canceled", "none"]
 SubscriptionPlan = Literal["monthly", "annual"]
@@ -34,3 +34,7 @@ class SubscriptionStatusResponse(BaseModel):
     trial_started_at: datetime | None = None
     trial_end: datetime | None = None
     source: SubscriptionSource | None = None
+    billing_portal_available: bool = Field(
+        default=False,
+        description="True when this user has a Stripe Customer (portal / invoices available).",
+    )

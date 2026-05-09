@@ -33,4 +33,6 @@ export interface SubscriptionStatusResponse {
   trial_end: string | null;
   trial_started_at?: string | null;
   source?: SubscriptionSource | null;
+  /** True when the user has a Stripe Customer ID (billing portal can open). */
+  billing_portal_available?: boolean;
 }

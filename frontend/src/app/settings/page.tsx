@@ -47,6 +47,12 @@ export default function SettingsPage() {
     }
   };
 
+  const status = subscription?.status;
+  const portalOk = subscription?.billing_portal_available === true;
+  const showPrimaryBillingPortal =
+    portalOk && (status === "active" || status === "past_due");
+  const showCanceledBillingLink = portalOk && status === "canceled";
+
   const choosePlan = async (plan: "monthly" | "annual") => {
     setSelectingPlan(plan);
     setError(null);
@@ -81,9 +87,6 @@ export default function SettingsPage() {
         <p className="text-(--color-primary-text)/80 mt-3 text-sm font-bold uppercase tracking-[0.05em]">
           Email: {user?.email || "Unavailable"}
         </p>
-        <p className="text-(--color-primary-text)/80 text-sm font-bold uppercase tracking-[0.05em]">
-          UID: {user?.uid || "Unavailable"}
-        </p>
       </Card>
 
       <Card>
@@ -96,14 +99,33 @@ export default function SettingsPage() {
           <TrialStatusBanner subscription={subscription} selectingPlan={selectingPlan} onChoosePlan={choosePlan} className="mb-3" />
         )}
 
-        <Button
-          onClick={() => void openPortal()}
-          disabled={openingPortal}
-          variant="secondary"
-          className="text-sm"
-        >
-          {openingPortal ? "Opening Portal..." : "Manage Subscription In Stripe Portal"}
-        </Button>
+        {!loadingSubscription && subscription ? (
+          <div className="mt-4 flex flex-col gap-3">
+            {showPrimaryBillingPortal ? (
+              <Button
+                onClick={() => void openPortal()}
+                disabled={openingPortal}
+                variant="secondary"
+                className="text-sm"
+              >
+                {openingPortal ? "Opening…" : "Manage subscription & billing"}
+              </Button>
+            ) : null}
+            {showCanceledBillingLink ? (
+              <p className="text-(--color-primary-text)/75 text-xs font-bold uppercase tracking-[0.05em]">
+                Need receipts or your card on file?{" "}
+                <button
+                  type="button"
+                  onClick={() => void openPortal()}
+                  disabled={openingPortal}
+                  className="inline font-black text-(--color-primary-text) underline decoration-2 underline-offset-2 hover:text-[#ff6d40] disabled:opacity-60"
+                >
+                  {openingPortal ? "Opening…" : "Open Stripe billing portal"}
+                </button>
+              </p>
+            ) : null}
+          </div>
+        ) : null}
       </Card>
     </PageShell>
   );

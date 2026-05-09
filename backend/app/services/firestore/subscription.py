@@ -205,3 +205,38 @@ def mark_subscription_canceled(db: Any, uid: str, stripe_customer_id: str) -> No
 def apply_subscription_deleted(db: Any, uid: str, stripe_customer_id: str) -> None:
     """customer.subscription.deleted — set canceled per BUILD_PLAN."""
     mark_subscription_canceled(db, uid, stripe_customer_id)
+
+
+def clear_stale_stripe_customer_link(
+    db: Any,
+    uid: str,
+    stripe_customer_id: str,
+) -> None:
+    """
+    Drop stored Stripe customer + subscription ids when that customer no longer exists in Stripe.
+    Keeps trial/status/plan fields so the user can run Checkout without `customer` on retry.
+    """
+    stripe_customer_id = stripe_customer_id.strip()
+    if not stripe_customer_id:
+        return
+    existing = get_subscription(db, uid)
+    if not existing:
+        return
+    current = (existing.stripe_customer_id or "").strip()
+    if current != stripe_customer_id:
+        return
+    cleared = existing.model_copy(
+        update={
+            "stripe_customer_id": None,
+            "stripe_subscription_id": None,
+        }
+    )
+    _upsert_subscription_doc(db, uid, cleared)
+    try:
+        _stripe_customer_ref(db, stripe_customer_id).delete()
+    except Exception as ex:
+        logger.warning(
+            "could not delete stripe_customers/%s: %s",
+            stripe_customer_id,
+            ex,
+        )

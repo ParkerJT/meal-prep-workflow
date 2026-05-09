@@ -19,10 +19,16 @@ interface WorkflowRequest {
   };
 }
 
+type RecipeSourceMode = "url" | "text" | "image";
+
 export default function GeneratePage() {
   const { api } = useAuth();
   const { loading, isAuthenticated } = useRequireAuth();
+  const [inputMode, setInputMode] = useState<RecipeSourceMode>("url");
   const [recipeUrl, setRecipeUrl] = useState("");
+  const [recipeText, setRecipeText] = useState("");
+  const [recipeImage, setRecipeImage] = useState<File | null>(null);
+  const [generationInstructions, setGenerationInstructions] = useState("");
   const [servings, setServings] = useState(4);
   const [calories, setCalories] = useState(500);
   const [protein, setProtein] = useState(30);
@@ -56,6 +62,12 @@ export default function GeneratePage() {
 
   const handleGenerate = async (e: FormEvent) => {
     e.preventDefault();
+    if (inputMode !== "url") {
+      setError(
+        "Generating from pasted text or a photo is not available yet. Switch to “Recipe URL” and paste a web or YouTube link."
+      );
+      return;
+    }
     setSubmitting(true);
     setError(null);
     setSubscriptionRequired(false);
@@ -128,7 +140,8 @@ export default function GeneratePage() {
       <Card className="mb-6">
         <CardTitle className="text-5xl">Generate Recipe</CardTitle>
         <CardDescription className="mt-3 text-base">
-          Paste a recipe URL and generate a macro-adjusted version.
+          Choose a recipe source, set your targets, and generate a macro-adjusted version. URL generation works today;
+          pasted text, photos, and personal instructions will connect once the server supports them.
         </CardDescription>
       </Card>
 
@@ -144,13 +157,115 @@ export default function GeneratePage() {
 
       <Card className="mb-6">
         <form onSubmit={handleGenerate} className="space-y-4">
-          <Input
-            value={recipeUrl}
-            onChange={(e) => setRecipeUrl(e.target.value)}
-            required
-            placeholder="https://example.com/recipe or YouTube URL"
-            className="text-sm normal-case tracking-normal"
-          />
+          <div>
+            <p className="text-(--color-primary-text) mb-2 text-sm font-bold uppercase tracking-[0.05em]">
+              Recipe source
+            </p>
+            <div
+              className="flex flex-wrap gap-2"
+              role="group"
+              aria-label="Recipe source type"
+            >
+              <Button
+                type="button"
+                variant={inputMode === "url" ? "primary" : "secondary"}
+                className="text-xs sm:text-sm"
+                aria-pressed={inputMode === "url"}
+                onClick={() => setInputMode("url")}
+              >
+                Recipe URL
+              </Button>
+              <Button
+                type="button"
+                variant={inputMode === "text" ? "primary" : "secondary"}
+                className="text-xs sm:text-sm"
+                aria-pressed={inputMode === "text"}
+                onClick={() => setInputMode("text")}
+              >
+                Pasted text
+              </Button>
+              <Button
+                type="button"
+                variant={inputMode === "image" ? "primary" : "secondary"}
+                className="text-xs sm:text-sm"
+                aria-pressed={inputMode === "image"}
+                onClick={() => setInputMode("image")}
+              >
+                Photo / screenshot
+              </Button>
+            </div>
+            {inputMode !== "url" ? (
+              <p className="text-(--color-primary-text)/75 mt-2 text-xs font-semibold uppercase tracking-[0.04em]">
+                Preview only — generation currently requires a URL.
+              </p>
+            ) : null}
+          </div>
+
+          {inputMode === "url" ? (
+            <label className="text-(--color-primary-text) block text-sm font-bold uppercase tracking-[0.05em]">
+              Link
+              <Input
+                value={recipeUrl}
+                onChange={(e) => setRecipeUrl(e.target.value)}
+                required
+                placeholder="https://example.com/recipe or YouTube URL"
+                className="mt-1 text-sm normal-case tracking-normal"
+              />
+            </label>
+          ) : null}
+
+          {inputMode === "text" ? (
+            <label className="text-(--color-primary-text) block text-sm font-bold uppercase tracking-[0.05em]">
+              Recipe text
+              <textarea
+                value={recipeText}
+                onChange={(e) => setRecipeText(e.target.value)}
+                rows={8}
+                placeholder="Paste the full recipe (ingredients and steps). This will be wired to the API in a future update."
+                className="mt-1 w-full border-3 border-black bg-[#2B2B2B] px-3 py-2 text-sm font-semibold normal-case tracking-normal text-[#F5F5F5] outline-none placeholder:text-[#F5F5F5]/40 focus:border-(--color-accent)"
+              />
+            </label>
+          ) : null}
+
+          {inputMode === "image" ? (
+            <div>
+              <label className="text-(--color-primary-text) block text-sm font-bold uppercase tracking-[0.05em]">
+                Image
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setRecipeImage(e.target.files?.[0] ?? null)}
+                  className="mt-2 block w-full cursor-pointer border-3 border-black bg-[#2B2B2B] px-3 py-2 text-sm font-semibold text-[#F5F5F5] file:mr-3 file:cursor-pointer file:border-3 file:border-black file:bg-(--color-accent) file:px-3 file:py-1 file:text-xs file:font-black file:uppercase file:tracking-[0.06em] file:text-black"
+                />
+              </label>
+              {recipeImage ? (
+                <p className="text-(--color-primary-text)/80 mt-2 text-xs font-semibold normal-case tracking-normal">
+                  Selected: {recipeImage.name}
+                </p>
+              ) : (
+                <p className="text-(--color-primary-text)/70 mt-2 text-xs font-semibold uppercase tracking-[0.04em]">
+                  Upload a screenshot or photo of a recipe page. Upload handling is not active yet.
+                </p>
+              )}
+            </div>
+          ) : null}
+
+          <label className="text-(--color-primary-text) block text-sm font-bold uppercase tracking-[0.05em]">
+            Instructions for this generation{" "}
+            <span className="font-semibold normal-case text-[#BDBDBD]">(optional)</span>
+            <textarea
+              value={generationInstructions}
+              onChange={(e) => setGenerationInstructions(e.target.value)}
+              rows={3}
+              disabled
+              placeholder='e.g. "Use Greek yogurt instead of sour cream" or "keep this vegan"'
+              className="mt-1 w-full cursor-not-allowed border-3 border-black bg-[#1a1a1a] px-3 py-2 text-sm font-semibold normal-case tracking-normal text-[#F5F5F5]/80 outline-none placeholder:text-[#F5F5F5]/35"
+            />
+            <span className="mt-1 block text-xs font-semibold normal-case tracking-normal text-[#BDBDBD]">
+              Placeholder — server support coming soon. Your text is not sent with the request yet.
+            </span>
+          </label>
+
         <div className="grid gap-3 sm:grid-cols-3">
           <label className="text-(--color-primary-text) text-sm font-bold uppercase tracking-[0.05em]">
             Servings
@@ -185,8 +300,13 @@ export default function GeneratePage() {
         </div>
         <Button
           type="submit"
-          disabled={submitting}
+          disabled={submitting || inputMode !== "url"}
           className="text-sm"
+          title={
+            inputMode !== "url"
+              ? "Switch to Recipe URL to generate — other sources are coming soon."
+              : undefined
+          }
         >
           {submitting ? "Generating..." : "Generate"}
         </Button>
