@@ -1,8 +1,8 @@
-from typing import Any
+from typing import Any, Literal
 
 from google.cloud.firestore import Query
 
-from app.services.agents.models import ConvertedRecipe, SavedRecipe
+from app.services.agents.models import ConvertedRecipe, OriginalRecipe, SavedRecipe
 from app.services.firestore.timestamps import (
     deep_convert_firestore_data,
     dump_datetimes_for_firestore,
@@ -59,7 +59,9 @@ def patch_saved(
     *,
     notes: str | None = None,
     converted_recipe: ConvertedRecipe | None = None,
-    original_recipe_id: str | None = None,
+    original_recipe: OriginalRecipe | None = None,
+    source_url: str | None = None,
+    source_type: Literal["web", "youtube", "text"] | None = None,
 ) -> tuple[str, SavedRecipe] | None:
     ref = _collection(db, uid).document(saved_recipe_id)
     snap = ref.get()
@@ -73,8 +75,14 @@ def patch_saved(
         update["converted_recipe"] = dump_datetimes_for_firestore(
             converted_recipe.model_dump(mode="python")
         )
-    if original_recipe_id is not None:
-        update["original_recipe_id"] = original_recipe_id
+    if original_recipe is not None:
+        update["original_recipe"] = dump_datetimes_for_firestore(
+            original_recipe.model_dump(mode="python")
+        )
+    if source_url is not None:
+        update["source_url"] = source_url
+    if source_type is not None:
+        update["source_type"] = source_type
     if not update:
         return snap.id, current
     ref.update(update)

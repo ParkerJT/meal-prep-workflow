@@ -11,8 +11,32 @@ class UserAdjustments(BaseModel):
 
 # Initial user input model (coming from frontend)
 class UserRequest(BaseModel):
-    recipe_url: str # (web page or YouTube video)
-    user_adjustments: UserAdjustments 
+    user_adjustments: UserAdjustments
+    input_mode: Literal["url", "text"] = "url"
+    recipe_url: str | None = None
+    recipe_text: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _default_input_mode_from_legacy_payload(cls, data):
+        if isinstance(data, dict) and "input_mode" not in data and data.get("recipe_url"):
+            data = dict(data)
+            data.setdefault("input_mode", "url")
+        return data
+
+    @model_validator(mode="after")
+    def _validate_input_fields(self):
+        if self.input_mode == "url":
+            if not self.recipe_url or not self.recipe_url.strip():
+                raise ValueError("recipe_url is required when input_mode is url")
+            if self.recipe_text:
+                raise ValueError("recipe_text must not be set when input_mode is url")
+        elif self.input_mode == "text":
+            if not self.recipe_text or not self.recipe_text.strip():
+                raise ValueError("recipe_text is required when input_mode is text")
+            if self.recipe_url:
+                raise ValueError("recipe_url must not be set when input_mode is text")
+        return self
 
 # Ingredient model inside original and converted recipes
 class Ingredient(BaseModel):
@@ -28,17 +52,6 @@ class OriginalRecipe(BaseModel):
     ingredients: list[Ingredient]
     instructions: list[str] # List of instructions
 
-
-# Firestore document for original_recipes/{recipeId} — same recipe body as OriginalRecipe,
-# plus app-populated metadata (not produced by the LLM). Use when reading/writing Firestore;
-# map Firestore Timestamps to/from datetime in the repository layer.
-class OriginalRecipeDocument(OriginalRecipe):
-    id: str  # document id; equals hash of normalized source_url (see BUILD_PLAN)
-    source_url: str
-    source_type: Literal["web", "youtube"]
-    created_at: datetime
-    created_by: str | None = None
-
 # Nutritional information model (for converted recipe)
 class NutritionalInfo(BaseModel):
     calories: int # Calories per serving
@@ -46,7 +59,7 @@ class NutritionalInfo(BaseModel):
 
 # Conversion metadata model (for converted recipe)
 class ConversionMetadata(BaseModel):
-    original_recipe_url: str # Original recipe URL
+    original_recipe_url: str # Original recipe URL or empty for pasted text
     conversion_notes: str # Notes on what was converted and why
 
 # Converted recipe model (output from conversion agent)
@@ -60,28 +73,29 @@ class ConvertedRecipe(BaseModel):
     conversion_metadata: ConversionMetadata
 
 
+class GenerateResponse(BaseModel):
+    original_recipe: OriginalRecipe
+    converted_recipe: ConvertedRecipe
+    source_url: str | None = None
+    source_type: Literal["web", "youtube", "text"]
+
+
 # Firestore document shape for users/{userId}/saved_recipes/{savedRecipeId}
 class SavedRecipe(BaseModel):
-    original_recipe_id: str  # original_recipes doc id
     saved_at: datetime
     notes: str = ""
+    source_url: str | None = None
+    source_type: Literal["web", "youtube", "text"] | None = None
+    original_recipe: OriginalRecipe | None = None
     converted_recipe: ConvertedRecipe | None = None
 
     @model_validator(mode="before")
     @classmethod
-    def _backfill_original_recipe_id(cls, data):
-        if isinstance(data, dict) and "original_recipe_id" not in data and "recipe_id" in data:
-            data = dict(data)
-            data["original_recipe_id"] = data["recipe_id"]
+    def _migrate_legacy_saved_recipe(cls, data):
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+        if "original_recipe_id" in data and "original_recipe" not in data:
+            data.pop("original_recipe_id", None)
+            data.pop("recipe_id", None)
         return data
-
-
-def original_recipe_from_document(doc: OriginalRecipeDocument) -> OriginalRecipe:
-    """Recipe fields only — for Firestore cache hits before LLM extraction."""
-    return OriginalRecipe(
-        title=doc.title,
-        description=doc.description,
-        servings=doc.servings,
-        ingredients=doc.ingredients,
-        instructions=doc.instructions,
-    )

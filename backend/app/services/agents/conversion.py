@@ -2,11 +2,10 @@ from __future__ import annotations
 
 from openai import OpenAI
 
-from app.config import Settings
+from app.services.agents.llm_factory import get_conversion_model
 from app.services.agents.models import ConvertedRecipe, OriginalRecipe, UserRequest
 
-settings = Settings()
-CONVERSION_MODEL = settings.OPENAI_MODEL
+CONVERSION_MODEL = get_conversion_model()
 
 SYSTEM_INSTRUCTIONS_CONVERSION = """You are a meal-prep recipe conversion specialist. You receive an extracted recipe and the user's target portion and nutrition goals. You must produce a converted recipe that matches the required output schema.
 
@@ -36,13 +35,16 @@ def convert_recipe(
     original_recipe: OriginalRecipe,
     user_request: UserRequest,
     openai_client: OpenAI,
+    *,
+    source_url: str | None = None,
 ) -> ConvertedRecipe:
     """
     Convert an extracted recipe to the user's target servings and macro goals using structured LLM output.
-    ``conversion_metadata.original_recipe_url`` is always set from ``user_request.recipe_url`` after parsing.
+    ``conversion_metadata.original_recipe_url`` is set from ``source_url`` or ``user_request.recipe_url``.
     """
     original_json = original_recipe.model_dump_json(indent=2)
     adjustments_json = user_request.user_adjustments.model_dump_json(indent=2)
+    provenance = source_url or user_request.recipe_url or ""
 
     prompt = f"""## Original recipe (JSON)
 {original_json}
@@ -51,7 +53,7 @@ def convert_recipe(
 {adjustments_json}
 
 ## Source URL (for context only; do not rely on fetching)
-{user_request.recipe_url}
+{provenance}
 
 Produce the converted recipe as specified in the system instructions. Servings must equal target_servings. Estimate nutrition per serving for the converted recipe."""
 
@@ -71,7 +73,7 @@ Produce the converted recipe as specified in the system instructions. Servings m
     return parsed.model_copy(
         update={
             "conversion_metadata": parsed.conversion_metadata.model_copy(
-                update={"original_recipe_url": user_request.recipe_url},
+                update={"original_recipe_url": provenance},
             ),
         },
     )

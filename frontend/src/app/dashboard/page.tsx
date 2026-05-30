@@ -14,6 +14,10 @@ const RECIPES_PER_PAGE = 16;
 type DateFilter = "all" | "30d" | "90d" | "year";
 type SortOption = "newest" | "oldest" | "az" | "za";
 
+function savedRecipeTitle(recipe: SavedRecipeResponse): string {
+  return recipe.converted_recipe?.title || recipe.original_recipe?.title || "Untitled recipe";
+}
+
 export default function DashboardPage() {
   const { api, signOut } = useAuth();
   const { user, loading, isAuthenticated } = useRequireAuth();
@@ -62,7 +66,7 @@ export default function DashboardPage() {
       }
 
       if (search) {
-        const title = (recipe.converted_recipe?.title || `Recipe ${recipe.original_recipe_id}`).toLowerCase();
+        const title = savedRecipeTitle(recipe).toLowerCase();
         const notes = (recipe.notes || "").toLowerCase();
         return title.includes(search) || notes.includes(search);
       }
@@ -71,8 +75,8 @@ export default function DashboardPage() {
     });
 
     return filtered.sort((a, b) => {
-      const aTitle = (a.converted_recipe?.title || `Recipe ${a.original_recipe_id}`).toLowerCase();
-      const bTitle = (b.converted_recipe?.title || `Recipe ${b.original_recipe_id}`).toLowerCase();
+      const aTitle = savedRecipeTitle(a).toLowerCase();
+      const bTitle = savedRecipeTitle(b).toLowerCase();
       const aSaved = new Date(a.saved_at).getTime();
       const bSaved = new Date(b.saved_at).getTime();
 
@@ -246,7 +250,7 @@ export default function DashboardPage() {
                 <Card className="flex h-full flex-col bg-(--color-surface)">
                   <div className="mb-2 flex items-start justify-between gap-3">
                     <h2 className="max-h-[3.2rem] overflow-hidden text-(--color-primary-text) font-heading text-xl leading-tight tracking-[0.04em] uppercase">
-                      {recipe.converted_recipe?.title || `Recipe ${recipe.original_recipe_id}`}
+                      {savedRecipeTitle(recipe)}
                     </h2>
                   </div>
                   <span className="mb-3 text-xs font-bold uppercase tracking-[0.04em] text-(--color-primary-text)/65">

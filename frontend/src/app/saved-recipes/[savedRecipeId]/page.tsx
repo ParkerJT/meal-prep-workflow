@@ -69,7 +69,7 @@ export default function SavedRecipeDetailPage() {
   };
 
   const recipeData = recipe?.converted_recipe ?? null;
-  const title = recipeData?.title || (recipe ? `Recipe ${recipe.original_recipe_id}` : "");
+  const title = recipeData?.title || recipe?.original_recipe?.title || "Untitled recipe";
   const savedDate = recipe ? new Date(recipe.saved_at) : null;
 
   return (

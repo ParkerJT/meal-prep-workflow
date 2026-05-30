@@ -1,8 +1,10 @@
 # Generate recipe — multi-input & personal instructions
 
+> **Where this fits:** Step **2** in [README.md](./README.md). Implement after [01 — LangGraph transition](./01-langgraph-transition.md) so branching (URL vs text vs image) and per-route model choice live in the graph. Cross-check the phased product plan in [03 — Build plan](./03-build-plan.md) (Phase 2.5) when you update behavior.
+
 Implementation guide for extending **Generate recipe** so users can supply a **URL**, **pasted text**, or an **image**; optional **per-generation personal instructions**; and optional **account-level global instructions** that apply to every generation unless superseded by the per-run field. Use this document as the checklist while changing backend, workflow, and frontend.
 
-**Related:** [`BUILD_PLAN.md`](BUILD_PLAN.md) (Phase 2.5 workflow), canonical `original_recipes` / user `saved_recipes`.
+**Related:** [`BUILD_PLAN.md`](./03-build-plan.md) (Phase 2.5 workflow), canonical `original_recipes` / user `saved_recipes`.
 
 ---
 
@@ -29,7 +31,7 @@ Implementation guide for extending **Generate recipe** so users can supply a **U
 - **Do not** call `get_original_recipe` for deduplication; **always** run the text or vision extraction path.
 - **Persistence after a successful generate:** You still need a stable **`source_url` (or agreed key)** so:
   - `ensure_canonical_original_recipe` can store the canonical original if you keep that pattern, and
-  - `POST /api/users/me/saved-recipes/from-generate` can resolve `original_recipe_id` from the same key the generate run used (see [`saved_recipes.py`](backend/app/routes/saved_recipes.py) `GeneratedSaveCreate` + 409 when canonical doc missing).
+  - `POST /api/users/me/saved-recipes/from-generate` can resolve `original_recipe_id` from the same key the generate run used (see [`saved_recipes.py`](../backend/app/routes/saved_recipes.py) `GeneratedSaveCreate` + 409 when canonical doc missing).
 
 **Recommended approach:**
 
@@ -45,7 +47,7 @@ Implementation guide for extending **Generate recipe** so users can supply a **U
 
 ### 3.1 Behavior
 
-- **Stored per user** (Firestore under `users/{uid}`, e.g. a dedicated field or a small `preferences` / `generation_settings` map—pick one pattern and stay consistent with existing [`users` ... `subscription`](backend/app/services/firestore/subscription.py) layout).
+- **Stored per user** (Firestore under `users/{uid}`, e.g. a dedicated field or a small `preferences` / `generation_settings` map—pick one pattern and stay consistent with existing [`users` ... `subscription`](../backend/app/services/firestore/subscription.py) layout).
 - **Loaded server-side on each `POST /api/workflow/generate`** (after auth): read global instructions for the current uid and pass them into conversion alongside any **per-generation** `personal_instructions`.
 - **Merge semantics for the LLM:** Send two labeled blocks so the model can reconcile them, for example:
   - **Standing account preferences** (global)—always apply when non-empty.
@@ -73,7 +75,7 @@ Add authenticated endpoints (names illustrative):
 
 - Firestore read/write helper for the chosen field(s) on `users/{uid}`.
 - Pydantic schemas for GET/PATCH payloads.
-- **`generate` route:** inject `Depends(get_current_uid)` (see [`dependencies.py`](backend/app/dependencies.py)), load global instructions, pass into `run_workflow(...)` or a wrapper that merges before `convert_recipe`.
+- **`generate` route:** inject `Depends(get_current_uid)` (see [`dependencies.py`](../backend/app/dependencies.py)), load global instructions, pass into `run_workflow(...)` or a wrapper that merges before `convert_recipe`.
 - **`run_workflow` / `convert_recipe`:** Accept optional `global_instructions: str | None` (or bundle both strings into a small struct) and extend the conversion user prompt + system instructions per §5.4.
 
 ### 3.5 Frontend checklist (global instructions)
@@ -96,9 +98,9 @@ Add authenticated endpoints (names illustrative):
 
 - `input_mode`: `"url" | "text" | "image"`
 - `recipe_url` (when `url`)
-- `recipe_text` (when `text`) — cap length (align with extraction limits, e.g. on the order of `WEB_PAGE_TEXT_MAX_CHARS` in [`extraction.py`](backend/app/services/agents/extraction.py))
+- `recipe_text` (when `text`) — cap length (align with extraction limits, e.g. on the order of `WEB_PAGE_TEXT_MAX_CHARS` in [`extraction.py`](../backend/app/services/agents/extraction.py))
 - `image` file (when `image`) — max size, allowed MIME types (`image/jpeg`, `image/png`, `image/webp`, etc.)
-- `user_adjustments` — existing [`UserAdjustments`](backend/app/services/agents/models.py)
+- `user_adjustments` — existing [`UserAdjustments`](../backend/app/services/agents/models.py)
 - `personal_instructions` (optional) — new; short max length (e.g. 500–1000 chars—tune to product)
 
 **Validation:** Exactly one of URL / text / image payload present; reject ambiguous combinations.
@@ -114,28 +116,28 @@ This removes ambiguity for the client when mode ≠ URL.
 
 ## 5. Backend modules (checklist)
 
-### 5.1 Models — [`backend/app/services/agents/models.py`](backend/app/services/agents/models.py)
+### 5.1 Models — [`backend/app/services/agents/models.py`](../backend/app/services/agents/models.py)
 
 - Extend or replace `UserRequest`:
   - Discriminated input (mode + optional fields), **or** optional fields with a `@model_validator` enforcing exclusivity.
 - Add optional `personal_instructions: str | None = None` (or similar name—avoid clashing with `SavedRecipe.notes`).
 - Consider keeping `UserAdjustments` as-is (macros + servings).
 
-### 5.2 Extraction — [`backend/app/services/agents/extraction.py`](backend/app/services/agents/extraction.py)
+### 5.2 Extraction — [`backend/app/services/agents/extraction.py`](../backend/app/services/agents/extraction.py)
 
 - **`recipe_extraction_workflow`**: Refactor so URL path keeps current behavior (cache **only** here for URLs).
 - Add **`extract_recipe_from_pasted_text(text, client)`** (or reuse `extract_recipe_from_web_page` with a system prompt tuned for “user pasted recipe text” if that is cleaner—same structured output `OriginalRecipe`).
 - Add **`extract_recipe_from_image(bytes | path, client)`** using a **vision-capable** model; structured output to `OriginalRecipe`. Define image preprocessing if needed (resize, max pixels) before API call.
 - New env var(s) if vision uses a different model than `OPENAI_MODEL` (optional but common).
 
-### 5.3 Workflow — [`backend/app/services/agents/workflow.py`](backend/app/services/agents/workflow.py)
+### 5.3 Workflow — [`backend/app/services/agents/workflow.py`](../backend/app/services/agents/workflow.py)
 
 - Branch on input mode:
   - **URL:** `recipe_extraction_workflow(db, url)` (cache applies inside).
   - **Text / image:** call new extraction helpers; **no** cache read; build synthetic `source_url`; then `ensure_canonical_original_recipe` with that key (still “create on miss”; first write wins per UUID).
 - Pass full `UserRequest` into `convert_recipe`.
 
-### 5.4 Conversion — [`backend/app/services/agents/conversion.py`](backend/app/services/agents/conversion.py)
+### 5.4 Conversion — [`backend/app/services/agents/conversion.py`](../backend/app/services/agents/conversion.py)
 
 - Include **`global_instructions`** (from account) and **`personal_instructions`** (from request) in the user message when present; label them distinctly (see §3.1).
 - Update `SYSTEM_INSTRUCTIONS_CONVERSION` so the model must:
@@ -145,14 +147,14 @@ This removes ambiguity for the client when mode ≠ URL.
   - Reflect what it did in `conversion_metadata.conversion_notes`.
 - Keep setting `original_recipe_url` from the authoritative `source_url` on the request (for URL it stays a real URL; for others it is the synthetic key).
 
-### 5.5 Routes — [`backend/app/routes/workflow.py`](backend/app/routes/workflow.py)
+### 5.5 Routes — [`backend/app/routes/workflow.py`](../backend/app/routes/workflow.py)
 
 - Accept new body shape and/or multipart.
 - Subscription gate unchanged (`require_subscription`).
 - Inject uid; load **global instructions** for generate (see §3).
 - Return extended response (see §4).
 
-### 5.6 Save — [`backend/app/routes/saved_recipes.py`](backend/app/routes/saved_recipes.py) & schemas — [`backend/app/schemas/recipes.py`](backend/app/schemas/recipes.py)
+### 5.6 Save — [`backend/app/routes/saved_recipes.py`](../backend/app/routes/saved_recipes.py) & schemas — [`backend/app/schemas/recipes.py`](../backend/app/schemas/recipes.py)
 
 - **`GeneratedSaveCreate`**: Client should send the **`source_url` returned from generate** (document in OpenAPI/comments).
 - No change strictly required if `source_url` remains the join key—only **client contract** and validation messaging.
@@ -163,7 +165,7 @@ This removes ambiguity for the client when mode ≠ URL.
 
 ---
 
-## 6. Frontend — [`frontend/src/app/generate/page.tsx`](frontend/src/app/generate/page.tsx)
+## 6. Frontend — [`frontend/src/app/generate/page.tsx`](../frontend/src/app/generate/page.tsx)
 
 - UI to choose **one** input mode (tabs, radio group, or segmented control).
 - Fields: URL input | textarea | file input + preview.
@@ -172,7 +174,7 @@ This removes ambiguity for the client when mode ≠ URL.
   - URL + text: JSON `fetch` (or `FormData` if unified endpoint).
   - Image: `FormData` with file + adjustments + instructions.
 - Store **`source_url` from generate response** in state; use it for `from-generate` instead of `recipeUrl.trim()` when in text/image mode (and prefer server value for URL mode too for consistency).
-- Copy/types: extend [`WorkflowRequest`](frontend/src/app/generate/page.tsx) / shared types in [`frontend/src/lib/frontend-types`](frontend/src/lib) if applicable.
+- Copy/types: extend [`WorkflowRequest`](../frontend/src/app/generate/page.tsx) / shared types in [`frontend/src/lib/frontend-types.ts`](../frontend/src/lib/frontend-types.ts) if applicable.
 - **Global instructions UI:** implement per §3.5 (Settings or equivalent); not duplicated on generate beyond a short hint/link unless you want full preview.
 
 ---
@@ -205,7 +207,7 @@ This removes ambiguity for the client when mode ≠ URL.
 
 ## 9. Documentation follow-ups
 
-- Update [`BUILD_PLAN.md`](BUILD_PLAN.md) Phase 2.5 / product bullets when behavior ships (multi-input + per-run + account-level instructions).
+- Update [`BUILD_PLAN.md`](./03-build-plan.md) Phase 2.5 / product bullets when behavior ships (multi-input + per-run + account-level instructions).
 - Optionally add a short **user-facing** FAQ: library “notes” vs “instructions for this generation” vs **standing account preferences**.
 
 ---

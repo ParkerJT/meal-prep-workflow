@@ -1,12 +1,9 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
-from app.config import Settings
-from app.services.agents.models import OriginalRecipe, original_recipe_from_document
-from app.services.firestore.original_recipes import get_original_recipe
-from app.services.recipe_id import compute_recipe_id, normalize_source_url
+from app.services.agents.llm_factory import get_extraction_model
+from app.services.agents.models import OriginalRecipe
 import requests
 import json
 import re
@@ -16,10 +13,8 @@ from trafilatura import extract, html2txt, baseline
 from trafilatura.downloads import fetch_response
 
 logger = logging.getLogger(__name__)
-settings = Settings()
 
-# Single model for structured recipe extraction (web + YouTube); from `Settings.OPENAI_MODEL`.
-EXTRACTION_MODEL = settings.OPENAI_MODEL
+EXTRACTION_MODEL = get_extraction_model()
 
 # Main article text from trafilatura can be very long; cap user message size for context limits.
 WEB_PAGE_TEXT_MAX_CHARS = 100_000
@@ -451,28 +446,31 @@ Ensure accuracy and completeness: extract every ingredient and every step for th
   return response.choices[0].message.parsed
 
 
-def recipe_extraction_workflow(db: Any, url: str) -> OriginalRecipe:
-  """
-  Extract a recipe from a web page or YouTube URL.
+def extract_recipe_from_pasted_text(
+  text: str,
+  openai_client: OpenAI,
+) -> OriginalRecipe:
+  """Extract a recipe from user-pasted plain text."""
+  body = _truncate_web_page_text_for_llm(text.strip())
 
-  If ``original_recipes/{recipe_id}`` already exists (same normalized URL hash),
-  returns the cached recipe without fetching the page or calling the LLM.
-  """
-  normalized = normalize_source_url(url)
-  recipe_id = compute_recipe_id(normalized)
-  cached = get_original_recipe(db, recipe_id)
-  if cached is not None:
-    return original_recipe_from_document(cached)
+  prompt = f"""Extract the complete recipe from the following pasted text.
 
-  client = OpenAI(api_key=settings.OPENAI_API_KEY)
+Page text:
+{body}
 
-  if url.startswith("https://www.youtube.com") or url.startswith("https://youtu.be"):
-    video_info = scrape_youtube_video(url)
-    recipe = extract_recipe_from_youtube_video(video_info['title'], video_info['description'], video_info['transcript'], client)
-  elif url.startswith("https://"):
-    content = scrape_web_page(url)
-    recipe = extract_recipe_from_web_page(content, client)
-  else:
-    raise ValueError(f"Invalid  or unsupported URL: {url}")
+Ensure accuracy and completeness: extract every ingredient and every step for the primary recipe in this text."""
 
-  return recipe
+  response = openai_client.beta.chat.completions.parse(
+    model=EXTRACTION_MODEL,
+    messages=[
+      {"role": "system", "content": SYSTEM_INSTRUCTIONS_WEB},
+      {"role": "user", "content": prompt},
+    ],
+    response_format=OriginalRecipe,
+  )
+
+  return response.choices[0].message.parsed
+
+
+def is_youtube_url(url: str) -> bool:
+  return url.startswith("https://www.youtube.com") or url.startswith("https://youtu.be")

@@ -5,7 +5,7 @@ import stripe
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import Settings
-from app.routes import auth, original_recipes, saved_recipes, stripe_webhook, subscription, workflow
+from app.routes import auth, saved_recipes, stripe_webhook, subscription, workflow
 from firebase_admin import credentials, initialize_app
 from contextlib import asynccontextmanager
 
@@ -60,7 +60,6 @@ app = FastAPI(
 
 # Include routes
 app.include_router(auth.router)
-app.include_router(original_recipes.router)
 app.include_router(saved_recipes.router)
 app.include_router(workflow.router)
 app.include_router(subscription.router)

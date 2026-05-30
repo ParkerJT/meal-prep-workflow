@@ -14,11 +14,28 @@ export interface ConvertedRecipe {
   };
 }
 
+export interface OriginalRecipe {
+  title: string;
+  description?: string | null;
+  servings: number;
+  ingredients: Array<{ name: string; quantity: number | string; unit?: string | null }>;
+  instructions: string[];
+}
+
+export interface GenerateResponse {
+  original_recipe: OriginalRecipe;
+  converted_recipe: ConvertedRecipe;
+  source_url: string | null;
+  source_type: "web" | "youtube" | "text";
+}
+
 export interface SavedRecipeResponse {
   id: string;
-  original_recipe_id: string;
   saved_at: string;
   notes: string;
+  source_url: string | null;
+  source_type: "web" | "youtube" | "text" | null;
+  original_recipe: OriginalRecipe | null;
   converted_recipe: ConvertedRecipe | null;
 }
 

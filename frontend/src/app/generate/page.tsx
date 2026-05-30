@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { ApiError } from "@/lib/api-client";
-import { ConvertedRecipe, SubscriptionStatusResponse } from "@/lib/frontend-types";
+import { GenerateResponse, SubscriptionStatusResponse } from "@/lib/frontend-types";
 import { getErrorMessage, LoadingState, LoggedInUtilityHeader, PageShell, useRequireAuth } from "@/lib/route-helpers";
 import { TrialStatusBanner } from "@/lib/TrialStatusBanner";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,9 @@ import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 
 interface WorkflowRequest {
-  recipe_url: string;
+  input_mode: "url" | "text";
+  recipe_url?: string;
+  recipe_text?: string;
   user_adjustments: {
     target_servings: number;
     target_calories: number;
@@ -38,7 +40,7 @@ export default function GeneratePage() {
   const [subscription, setSubscription] = useState<SubscriptionStatusResponse | null>(null);
   const [loadingSubscription, setLoadingSubscription] = useState(true);
   const [selectingPlan, setSelectingPlan] = useState<"monthly" | "annual" | null>(null);
-  const [result, setResult] = useState<ConvertedRecipe | null>(null);
+  const [result, setResult] = useState<GenerateResponse | null>(null);
   const [saveNotes, setSaveNotes] = useState("");
   const [savingResult, setSavingResult] = useState(false);
   const [savedResultId, setSavedResultId] = useState<string | null>(null);
@@ -62,10 +64,8 @@ export default function GeneratePage() {
 
   const handleGenerate = async (e: FormEvent) => {
     e.preventDefault();
-    if (inputMode !== "url") {
-      setError(
-        "Generating from pasted text or a photo is not available yet. Switch to “Recipe URL” and paste a web or YouTube link."
-      );
+    if (inputMode === "image") {
+      setError("Generating from a photo is not available yet. Use a recipe URL or pasted text.");
       return;
     }
     setSubmitting(true);
@@ -75,14 +75,19 @@ export default function GeneratePage() {
     setSavedResultId(null);
     try {
       const payload: WorkflowRequest = {
-        recipe_url: recipeUrl.trim(),
+        input_mode: inputMode === "text" ? "text" : "url",
         user_adjustments: {
           target_servings: servings,
           target_calories: calories,
           target_protein: protein,
         },
       };
-      const data = await api.fetch<ConvertedRecipe>("/api/workflow/generate", {
+      if (inputMode === "text") {
+        payload.recipe_text = recipeText.trim();
+      } else {
+        payload.recipe_url = recipeUrl.trim();
+      }
+      const data = await api.fetch<GenerateResponse>("/api/workflow/generate", {
         method: "POST",
         body: JSON.stringify(payload),
       });
@@ -106,9 +111,11 @@ export default function GeneratePage() {
       const data = await api.fetch<{ id: string }>("/api/users/me/saved-recipes/from-generate", {
         method: "POST",
         body: JSON.stringify({
-          source_url: recipeUrl.trim(),
+          source_url: result.source_url,
+          source_type: result.source_type,
+          original_recipe: result.original_recipe,
           notes: saveNotes,
-          converted_recipe: result,
+          converted_recipe: result.converted_recipe,
         }),
       });
       setSavedResultId(data.id);
@@ -140,8 +147,7 @@ export default function GeneratePage() {
       <Card className="mb-6">
         <CardTitle className="text-5xl">Generate Recipe</CardTitle>
         <CardDescription className="mt-3 text-base">
-          Choose a recipe source, set your targets, and generate a macro-adjusted version. URL generation works today;
-          pasted text, photos, and personal instructions will connect once the server supports them.
+          Choose a recipe source, set your targets, and generate a macro-adjusted version. URL and pasted text are supported; photo upload is coming soon.
         </CardDescription>
       </Card>
 
@@ -300,11 +306,11 @@ export default function GeneratePage() {
         </div>
         <Button
           type="submit"
-          disabled={submitting || inputMode !== "url"}
+          disabled={submitting || inputMode === "image"}
           className="text-sm"
           title={
-            inputMode !== "url"
-              ? "Switch to Recipe URL to generate — other sources are coming soon."
+            inputMode === "image"
+              ? "Photo upload is coming soon — use a URL or pasted text."
               : undefined
           }
         >
@@ -338,27 +344,27 @@ export default function GeneratePage() {
 
       {result ? (
         <Card>
-          <CardTitle className="text-4xl">{result.title}</CardTitle>
+          <CardTitle className="text-4xl">{result.converted_recipe.title}</CardTitle>
           <p className="text-(--color-primary-text)/80 mb-3 mt-2 text-sm font-bold uppercase tracking-[0.04em]">
-            {result.description?.trim() || "No description available for this recipe."}
+            {result.converted_recipe.description?.trim() || "No description available for this recipe."}
           </p>
           <div className="mb-4 grid gap-2 border-3 border-black bg-[#2B2B2B] p-3 text-sm text-[#F5F5F5] sm:grid-cols-2">
             <p>
               <span className="font-black uppercase tracking-[0.04em] text-[#BDBDBD]">Servings:</span>{" "}
-              {result.servings ?? "Unknown"}
+              {result.converted_recipe.servings ?? "Unknown"}
             </p>
             <p>
               <span className="font-black uppercase tracking-[0.04em] text-[#BDBDBD]">Calories:</span>{" "}
-              {result.nutritional_info?.calories ?? "Unknown"}
+              {result.converted_recipe.nutritional_info?.calories ?? "Unknown"}
             </p>
             <p>
               <span className="font-black uppercase tracking-[0.04em] text-[#BDBDBD]">Protein:</span>{" "}
-              {result.nutritional_info?.protein ?? "Unknown"}g
+              {result.converted_recipe.nutritional_info?.protein ?? "Unknown"}g
             </p>
           </div>
 
           <h2 className="font-heading text-(--color-primary-text) mb-2 text-4xl uppercase tracking-[0.05em]">Ingredients</h2>
-          {result.ingredients?.length ? (
+          {result.converted_recipe.ingredients?.length ? (
             <div className="mb-4 overflow-hidden border-3 border-black">
               <div className="grid grid-cols-[100px_120px_1fr] bg-[#2B2B2B] px-3 py-2 text-xs font-black uppercase tracking-wide text-[#BDBDBD]">
                 <span>Quantity</span>
@@ -366,7 +372,7 @@ export default function GeneratePage() {
                 <span>Ingredient</span>
               </div>
               <ul className="divide-y divide-black">
-                {result.ingredients.map((ingredient, idx) => (
+                {result.converted_recipe.ingredients.map((ingredient, idx) => (
                   <li
                     key={`${ingredient.name}-${idx}`}
                     className="text-(--color-primary-text) grid grid-cols-[100px_120px_1fr] bg-(--color-surface) px-3 py-2 text-sm font-semibold"
@@ -385,9 +391,9 @@ export default function GeneratePage() {
           )}
 
           <h2 className="font-heading text-(--color-primary-text) mb-2 text-4xl uppercase tracking-[0.05em]">Instructions</h2>
-          {result.instructions?.length ? (
+          {result.converted_recipe.instructions?.length ? (
             <ol className="text-(--color-primary-text) mb-4 list-decimal space-y-1 pl-6 text-sm font-semibold">
-              {result.instructions.map((step, idx) => (
+              {result.converted_recipe.instructions.map((step, idx) => (
                 <li key={`step-${idx}`}>{step}</li>
               ))}
             </ol>
