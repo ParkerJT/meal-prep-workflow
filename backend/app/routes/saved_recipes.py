@@ -12,7 +12,18 @@ from app.services.agents.models import SavedRecipe
 from app.services import save_flow
 from app.services.firestore import saved_recipes as saved_svc
 from app.services.firestore.timestamps import utc_now
-from app.services.recipe_id import normalize_source_url
+from app.services.recipe_id import normalize_source_key, normalize_source_url
+
+
+def _normalize_persisted_source_url(
+    source_url: str | None,
+    source_type: str | None,
+) -> str | None:
+    if not source_url:
+        return None
+    if source_type == "text":
+        return normalize_source_key(source_url)
+    return normalize_source_url(source_url)
 
 router = APIRouter(prefix="/api/users/me/saved-recipes", tags=["saved-recipes"])
 
@@ -75,7 +86,7 @@ def create_saved_from_generate(
     uid: str = Depends(get_current_uid),
     db=Depends(get_firestore),
 ):
-    normalized = normalize_source_url(body.source_url) if body.source_url else None
+    normalized = _normalize_persisted_source_url(body.source_url, body.source_type)
     recipe = SavedRecipe(
         saved_at=utc_now(),
         notes=body.notes,

@@ -1,6 +1,6 @@
 import pytest
 
-from app.services.recipe_id import compute_recipe_id, normalize_source_url
+from app.services.recipe_id import compute_recipe_id, normalize_source_key, normalize_source_url
 
 
 def test_normalize_strips_trailing_slash_and_fragment():
@@ -29,3 +29,16 @@ def test_compute_recipe_id_deterministic():
 def test_empty_url_raises():
     with pytest.raises(ValueError, match="empty"):
         normalize_source_url("   ")
+
+
+def test_normalize_source_key_text_scheme():
+    key = "text://550E8400-E29B-41D4-A716-446655440000"
+    assert (
+        normalize_source_key(key)
+        == "text://550e8400-e29b-41d4-a716-446655440000"
+    )
+
+
+def test_normalize_source_key_rejects_invalid_text_uuid():
+    with pytest.raises(ValueError, match="Invalid text source key"):
+        normalize_source_key("text://not-a-uuid")

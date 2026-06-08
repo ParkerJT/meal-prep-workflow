@@ -17,6 +17,14 @@ function getTrialDaysRemaining(subscription: SubscriptionStatusResponse | null):
   return Math.max(0, Math.ceil(ms / (1000 * 60 * 60 * 24)));
 }
 
+function formatSubscriptionEndDate(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+
 export function TrialStatusBanner({
   subscription,
   selectingPlan,
@@ -25,7 +33,9 @@ export function TrialStatusBanner({
 }: TrialStatusBannerProps) {
   const trialDaysRemaining = getTrialDaysRemaining(subscription);
   const isExpiredTrial = subscription?.status === "trialing" && trialDaysRemaining === 0;
-  const isPaid = subscription?.status === "active";
+  const isScheduledCancel =
+    subscription?.status === "active" && !!subscription.subscription_ends_at;
+  const isPaid = subscription?.status === "active" && !isScheduledCancel;
   const isCanceled = subscription?.status === "canceled";
   const showUpgradeCta = !isPaid;
 
@@ -45,6 +55,17 @@ export function TrialStatusBanner({
         <p className="text-(--color-primary-text) text-sm font-black uppercase tracking-[0.05em]">
           Trial days remaining: {trialDaysRemaining ?? "unknown"}
         </p>
+      ) : null}
+      {isScheduledCancel && subscription.subscription_ends_at ? (
+        <div className="mt-3 space-y-2">
+          <p className="text-sm font-black uppercase tracking-[0.05em] text-[#A83E1B]">
+            Your subscription is set to end on {formatSubscriptionEndDate(subscription.subscription_ends_at)}.
+          </p>
+          <p className="text-(--color-primary-text)/90 text-sm font-bold leading-snug normal-case tracking-normal">
+            You&apos;ll keep full access until then. Use Manage subscription &amp; billing to resume
+            renewal, or pick a plan below to resubscribe.
+          </p>
+        </div>
       ) : null}
       {isCanceled ? (
         <div className="mt-3 space-y-2">
@@ -70,7 +91,7 @@ export function TrialStatusBanner({
           >
             {selectingPlan === "monthly"
               ? "Redirecting..."
-              : isCanceled
+              : isCanceled || isScheduledCancel
                 ? "Resubscribe — Monthly"
                 : "Choose Monthly Plan"}
           </Button>
@@ -82,7 +103,7 @@ export function TrialStatusBanner({
           >
             {selectingPlan === "annual"
               ? "Redirecting..."
-              : isCanceled
+              : isCanceled || isScheduledCancel
                 ? "Resubscribe — Annual"
                 : "Choose Annual Plan"}
           </Button>

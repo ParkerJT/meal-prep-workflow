@@ -73,6 +73,59 @@ def test_convert_recipe_returns_parsed_and_sets_metadata_url():
     assert "Test Chili" in user_content
 
 
+def test_convert_recipe_includes_delimited_instruction_blocks():
+    user_request = UserRequest(
+        recipe_url="https://example.com/recipe",
+        personal_instructions="use Greek yogurt",
+        user_adjustments=UserAdjustments(
+            target_servings=4,
+            target_calories=500,
+            target_protein=40,
+        ),
+    )
+    original = OriginalRecipe(
+        title="Test Chili",
+        description=None,
+        servings=2,
+        ingredients=[Ingredient(name="beans", quantity=1, unit="can")],
+        instructions=["Simmer."],
+    )
+    parsed_from_llm = ConvertedRecipe(
+        title="Test Chili",
+        description=None,
+        servings=4,
+        ingredients=[Ingredient(name="beans", quantity=2, unit="can")],
+        instructions=["Simmer."],
+        nutritional_info=NutritionalInfo(calories=500, protein=40),
+        conversion_metadata=ConversionMetadata(
+            original_recipe_url="",
+            conversion_notes="Adjusted.",
+        ),
+    )
+
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
+    mock_response.choices[0].message.parsed = parsed_from_llm
+
+    mock_client = MagicMock(spec=OpenAI)
+    mock_client.beta.chat.completions.parse.return_value = mock_response
+
+    convert_recipe(
+        original,
+        user_request,
+        mock_client,
+        global_instructions="standing vegetarian preference",
+    )
+
+    user_content = mock_client.beta.chat.completions.parse.call_args.kwargs["messages"][1]["content"]
+    system_content = mock_client.beta.chat.completions.parse.call_args.kwargs["messages"][0]["content"]
+    assert "<<<ACCOUNT_PREFERENCES>>>" in user_content
+    assert "standing vegetarian preference" in user_content
+    assert "<<<RUN_INSTRUCTIONS>>>" in user_content
+    assert "use Greek yogurt" in user_content
+    assert "untrusted" in system_content.lower()
+
+
 def test_convert_recipe_raises_when_parse_returns_none():
     user_request = UserRequest(
         recipe_url="https://example.com/r",

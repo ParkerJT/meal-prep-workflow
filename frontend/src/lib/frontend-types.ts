@@ -22,6 +22,10 @@ export interface OriginalRecipe {
   instructions: string[];
 }
 
+export interface GenerationPreferencesResponse {
+  global_instructions: string;
+}
+
 export interface GenerateResponse {
   original_recipe: OriginalRecipe;
   converted_recipe: ConvertedRecipe;
@@ -50,6 +54,10 @@ export interface SubscriptionStatusResponse {
   trial_end: string | null;
   trial_started_at?: string | null;
   source?: SubscriptionSource | null;
+  /** True when Stripe will not renew at the current period end. */
+  cancel_at_period_end?: boolean;
+  /** When set on an active subscription, access ends at this time. */
+  subscription_ends_at?: string | null;
   /** True when the user has a Stripe Customer ID (billing portal can open). */
   billing_portal_available?: boolean;
 }

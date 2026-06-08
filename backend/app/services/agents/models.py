@@ -1,7 +1,13 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, field_validator, model_validator
+
+from app.services.user_text import (
+    PERSONAL_INSTRUCTIONS_MAX_CHARS,
+    RECIPE_TEXT_MAX_CHARS,
+    sanitize_user_text,
+)
 
 # User adjustments packaged
 class UserAdjustments(BaseModel):
@@ -15,6 +21,32 @@ class UserRequest(BaseModel):
     input_mode: Literal["url", "text"] = "url"
     recipe_url: str | None = None
     recipe_text: str | None = None
+    personal_instructions: str | None = None
+
+    @field_validator("recipe_text", mode="before")
+    @classmethod
+    def _sanitize_recipe_text(cls, value):
+        if value is None:
+            return None
+        return sanitize_user_text(
+            value,
+            max_chars=RECIPE_TEXT_MAX_CHARS,
+            field_name="recipe_text",
+            required=False,
+        )
+
+    @field_validator("personal_instructions", mode="before")
+    @classmethod
+    def _sanitize_personal_instructions(cls, value):
+        if value is None:
+            return None
+        cleaned = sanitize_user_text(
+            value,
+            max_chars=PERSONAL_INSTRUCTIONS_MAX_CHARS,
+            field_name="personal_instructions",
+            required=False,
+        )
+        return cleaned or None
 
     @model_validator(mode="before")
     @classmethod
@@ -32,7 +64,7 @@ class UserRequest(BaseModel):
             if self.recipe_text:
                 raise ValueError("recipe_text must not be set when input_mode is url")
         elif self.input_mode == "text":
-            if not self.recipe_text or not self.recipe_text.strip():
+            if not self.recipe_text:
                 raise ValueError("recipe_text is required when input_mode is text")
             if self.recipe_url:
                 raise ValueError("recipe_url must not be set when input_mode is text")

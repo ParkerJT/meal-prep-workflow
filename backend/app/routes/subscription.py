@@ -10,11 +10,16 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.config import Settings
 from app.dependencies import get_current_uid, get_firestore
-from app.schemas.subscription import CheckoutPlanBody, SubscriptionStatusResponse
+from app.schemas.subscription import (
+    CheckoutPlanBody,
+    SubscriptionStatusResponse,
+    subscription_status_response,
+)
 from app.services.firestore.subscription import (
     clear_stale_stripe_customer_link,
     ensure_signup_trial,
     get_subscription,
+    reconcile_subscription_from_stripe,
 )
 
 router = APIRouter(prefix="/api/subscription", tags=["subscription"])
@@ -143,15 +148,7 @@ def start_signup_trial(
     Idempotent: returns existing subscription document unchanged when present.
     """
     sub = ensure_signup_trial(db, uid)
-    return SubscriptionStatusResponse(
-        status=sub.status,
-        plan=sub.plan,
-        current_period_end=sub.current_period_end,
-        trial_started_at=sub.trial_started_at,
-        trial_end=sub.trial_end,
-        source=sub.source,
-        billing_portal_available=bool(sub.stripe_customer_id),
-    )
+    return subscription_status_response(sub)
 
 
 @router.get("/me", response_model=SubscriptionStatusResponse)
@@ -160,17 +157,11 @@ def get_my_subscription_status(
     db: Any = Depends(get_firestore),
 ) -> SubscriptionStatusResponse:
     sub = get_subscription(db, uid)
+    if sub and sub.stripe_customer_id:
+        sub = reconcile_subscription_from_stripe(db, uid, settings) or sub
     if not sub:
         return SubscriptionStatusResponse(status="none")
-    return SubscriptionStatusResponse(
-        status=sub.status,
-        plan=sub.plan,
-        current_period_end=sub.current_period_end,
-        trial_started_at=sub.trial_started_at,
-        trial_end=sub.trial_end,
-        source=sub.source,
-        billing_portal_available=bool(sub.stripe_customer_id),
-    )
+    return subscription_status_response(sub)
 
 
 @router.post("/portal")

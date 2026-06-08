@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import uuid
 from urllib.parse import urlsplit, urlunsplit
+
+TEXT_SOURCE_SCHEME = "text"
 
 
 def normalize_source_url(url: str) -> str:
@@ -37,3 +40,26 @@ def normalize_source_url(url: str) -> str:
 
 def compute_recipe_id(normalized_url: str) -> str:
     return hashlib.sha256(normalized_url.encode("utf-8")).hexdigest()[:32]
+
+
+def normalize_source_key(key: str) -> str:
+    """
+    Normalize a source key for persistence.
+
+    Synthetic pasted-text keys use ``text://{uuid}`` and are validated but not
+    URL-normalized like HTTPS sources.
+    """
+    s = key.strip()
+    if not s:
+        raise ValueError("source_url is empty")
+
+    parts = urlsplit(s)
+    if parts.scheme.lower() == TEXT_SOURCE_SCHEME:
+        raw_id = (parts.netloc or parts.path.lstrip("/")).lower()
+        try:
+            parsed = uuid.UUID(raw_id)
+        except ValueError as exc:
+            raise ValueError(f"Invalid text source key: {key}") from exc
+        return f"{TEXT_SOURCE_SCHEME}://{parsed}"
+
+    return normalize_source_url(s)

@@ -24,11 +24,11 @@ You do **not** need persistence, streaming, or subgraphs on day one.
 ### 1. Dependencies and config
 
 - Add `langgraph` (and whatever LangChain packages you use for chat models / structured output, aligned with current LangGraph docs).
-- Keep API keys and default model IDs in **`Settings`** / env (e.g. `backend/.env.example`). Plan for **multiple** model profiles later (text vs vision) even if you only wire one profile now.
+- Keep API keys and default model IDs in **`Settings`** / env (e.g. `backend/.env.example`). Plan for **multiple** model profiles later (e.g. default chat vs structured extract) even if you only wire one profile now.
 
 ### 2. Model abstraction (parallel track)
 
-- Introduce a small **factory or registry** (“default chat”, “structured extract”, later “vision”) so nodes do not import `OpenAI()` directly everywhere. This is what makes “swap provider/model” real, independent of LangGraph.
+- Introduce a small **factory or registry** (“default chat”, “structured extract”) so nodes do not import `OpenAI()` directly everywhere. This is what makes “swap provider/model” real, independent of LangGraph.
 
 ### 3. Define workflow state
 

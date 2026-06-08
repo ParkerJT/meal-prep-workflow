@@ -4,7 +4,8 @@ from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 
-from app.dependencies import require_subscription
+from app.dependencies import get_current_uid, get_firestore, require_subscription
+from app.services.agents.workflow import resolve_input_node
 from app.main import app
 from app.services.agents.errors import WorkflowRejection
 from app.services.agents.models import (
@@ -106,12 +107,39 @@ async def _override_require_subscription() -> dict:
     return {"uid": "test-user", "email": "test@example.com"}
 
 
+def _override_uid() -> str:
+    return "test-user"
+
+
+def _override_db():
+    return MagicMock()
+
+
+def test_resolve_input_text_mode_sets_text_source_url() -> None:
+    ur = UserRequest(
+        input_mode="text",
+        recipe_text="Chicken Soup\n2 cups broth",
+        user_adjustments=UserAdjustments(
+            target_servings=2,
+            target_calories=400,
+            target_protein=30,
+        ),
+    )
+    out = resolve_input_node({"user_request": ur})
+    assert out["source_type"] == "text"
+    assert out["source_url"].startswith("text://")
+    assert out["raw_content"] == "Chicken Soup\n2 cups broth"
+
+
+@patch("app.routes.workflow.prefs_svc.get_generation_preferences", return_value="")
 @patch("app.routes.workflow.run_workflow")
-def test_workflow_generate_endpoint(mock_run: MagicMock) -> None:
+def test_workflow_generate_endpoint(mock_run: MagicMock, _mock_prefs: MagicMock) -> None:
     response = _sample_generate_response()
     mock_run.return_value = response
 
     app.dependency_overrides[require_subscription] = _override_require_subscription
+    app.dependency_overrides[get_current_uid] = _override_uid
+    app.dependency_overrides[get_firestore] = _override_db
     try:
         client = TestClient(app)
         resp = client.post(
@@ -135,11 +163,14 @@ def test_workflow_generate_endpoint(mock_run: MagicMock) -> None:
     mock_run.assert_called_once()
 
 
+@patch("app.routes.workflow.prefs_svc.get_generation_preferences", return_value="")
 @patch("app.routes.workflow.run_workflow")
-def test_workflow_generate_returns_422_on_rejection(mock_run: MagicMock) -> None:
+def test_workflow_generate_returns_422_on_rejection(mock_run: MagicMock, _mock_prefs: MagicMock) -> None:
     mock_run.side_effect = WorkflowRejection("not_a_recipe", "This is not a recipe.")
 
     app.dependency_overrides[require_subscription] = _override_require_subscription
+    app.dependency_overrides[get_current_uid] = _override_uid
+    app.dependency_overrides[get_firestore] = _override_db
     try:
         client = TestClient(app)
         resp = client.post(

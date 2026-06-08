@@ -1,19 +1,29 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { ApiError } from "@/lib/api-client";
-import { GenerateResponse, SubscriptionStatusResponse } from "@/lib/frontend-types";
+import {
+  GenerateResponse,
+  GenerationPreferencesResponse,
+  SubscriptionStatusResponse,
+} from "@/lib/frontend-types";
 import { getErrorMessage, LoadingState, LoggedInUtilityHeader, PageShell, useRequireAuth } from "@/lib/route-helpers";
 import { TrialStatusBanner } from "@/lib/TrialStatusBanner";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 
+// Keep in sync with backend/app/services/user_text.py
+const RECIPE_TEXT_MAX_CHARS = 50_000;
+const PERSONAL_INSTRUCTIONS_MAX_CHARS = 500;
+
 interface WorkflowRequest {
   input_mode: "url" | "text";
   recipe_url?: string;
   recipe_text?: string;
+  personal_instructions?: string;
   user_adjustments: {
     target_servings: number;
     target_calories: number;
@@ -21,7 +31,15 @@ interface WorkflowRequest {
   };
 }
 
-type RecipeSourceMode = "url" | "text" | "image";
+function CharacterCounter({ current, max }: { current: number; max: number }) {
+  return (
+    <span className="text-(--color-primary-text)/70 mt-1 block text-xs font-semibold normal-case tracking-normal">
+      {current.toLocaleString()} / {max.toLocaleString()} characters
+    </span>
+  );
+}
+
+type RecipeSourceMode = "url" | "text";
 
 export default function GeneratePage() {
   const { api } = useAuth();
@@ -29,7 +47,6 @@ export default function GeneratePage() {
   const [inputMode, setInputMode] = useState<RecipeSourceMode>("url");
   const [recipeUrl, setRecipeUrl] = useState("");
   const [recipeText, setRecipeText] = useState("");
-  const [recipeImage, setRecipeImage] = useState<File | null>(null);
   const [generationInstructions, setGenerationInstructions] = useState("");
   const [servings, setServings] = useState(4);
   const [calories, setCalories] = useState(500);
@@ -44,30 +61,32 @@ export default function GeneratePage() {
   const [saveNotes, setSaveNotes] = useState("");
   const [savingResult, setSavingResult] = useState(false);
   const [savedResultId, setSavedResultId] = useState<string | null>(null);
+  const [hasGlobalInstructions, setHasGlobalInstructions] = useState(false);
 
   useEffect(() => {
     if (loading || !isAuthenticated) return;
-    const loadSubscription = async () => {
+    const loadPageData = async () => {
       setLoadingSubscription(true);
       try {
         await api.fetch<SubscriptionStatusResponse>("/api/subscription/start-trial", { method: "POST" });
-        const data = await api.fetch<SubscriptionStatusResponse>("/api/subscription/me");
-        setSubscription(data);
+        const [subData, prefsData] = await Promise.all([
+          api.fetch<SubscriptionStatusResponse>("/api/subscription/me"),
+          api.fetch<GenerationPreferencesResponse>("/api/users/me/generation-preferences"),
+        ]);
+        setSubscription(subData);
+        setHasGlobalInstructions(!!prefsData.global_instructions.trim());
       } catch {
         setSubscription(null);
+        setHasGlobalInstructions(false);
       } finally {
         setLoadingSubscription(false);
       }
     };
-    void loadSubscription();
+    void loadPageData();
   }, [api, isAuthenticated, loading]);
 
   const handleGenerate = async (e: FormEvent) => {
     e.preventDefault();
-    if (inputMode === "image") {
-      setError("Generating from a photo is not available yet. Use a recipe URL or pasted text.");
-      return;
-    }
     setSubmitting(true);
     setError(null);
     setSubscriptionRequired(false);
@@ -86,6 +105,10 @@ export default function GeneratePage() {
         payload.recipe_text = recipeText.trim();
       } else {
         payload.recipe_url = recipeUrl.trim();
+      }
+      const trimmedInstructions = generationInstructions.trim();
+      if (trimmedInstructions) {
+        payload.personal_instructions = trimmedInstructions;
       }
       const data = await api.fetch<GenerateResponse>("/api/workflow/generate", {
         method: "POST",
@@ -147,7 +170,7 @@ export default function GeneratePage() {
       <Card className="mb-6">
         <CardTitle className="text-5xl">Generate Recipe</CardTitle>
         <CardDescription className="mt-3 text-base">
-          Choose a recipe source, set your targets, and generate a macro-adjusted version. URL and pasted text are supported; photo upload is coming soon.
+          Choose a recipe source, set your targets, and generate a macro-adjusted version. URL and pasted text are supported.
         </CardDescription>
       </Card>
 
@@ -190,19 +213,13 @@ export default function GeneratePage() {
               >
                 Pasted text
               </Button>
-              <Button
-                type="button"
-                variant={inputMode === "image" ? "primary" : "secondary"}
-                className="text-xs sm:text-sm"
-                aria-pressed={inputMode === "image"}
-                onClick={() => setInputMode("image")}
-              >
-                Photo / screenshot
-              </Button>
             </div>
-            {inputMode !== "url" ? (
-              <p className="text-(--color-primary-text)/75 mt-2 text-xs font-semibold uppercase tracking-[0.04em]">
-                Preview only — generation currently requires a URL.
+            {hasGlobalInstructions ? (
+              <p className="text-(--color-primary-text)/75 mt-2 text-xs font-semibold normal-case tracking-normal">
+                Your account preferences will apply to this generation.{" "}
+                <Link href="/settings" className="font-black text-(--color-primary-text) underline decoration-2 underline-offset-2 hover:text-[#ff6d40]">
+                  Edit in Settings
+                </Link>
               </p>
             ) : null}
           </div>
@@ -227,33 +244,13 @@ export default function GeneratePage() {
                 value={recipeText}
                 onChange={(e) => setRecipeText(e.target.value)}
                 rows={8}
-                placeholder="Paste the full recipe (ingredients and steps). This will be wired to the API in a future update."
+                required
+                maxLength={RECIPE_TEXT_MAX_CHARS}
+                placeholder="Paste the full recipe (ingredients and steps)."
                 className="mt-1 w-full border-3 border-black bg-[#2B2B2B] px-3 py-2 text-sm font-semibold normal-case tracking-normal text-[#F5F5F5] outline-none placeholder:text-[#F5F5F5]/40 focus:border-(--color-accent)"
               />
+              <CharacterCounter current={recipeText.length} max={RECIPE_TEXT_MAX_CHARS} />
             </label>
-          ) : null}
-
-          {inputMode === "image" ? (
-            <div>
-              <label className="text-(--color-primary-text) block text-sm font-bold uppercase tracking-[0.05em]">
-                Image
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => setRecipeImage(e.target.files?.[0] ?? null)}
-                  className="mt-2 block w-full cursor-pointer border-3 border-black bg-[#2B2B2B] px-3 py-2 text-sm font-semibold text-[#F5F5F5] file:mr-3 file:cursor-pointer file:border-3 file:border-black file:bg-(--color-accent) file:px-3 file:py-1 file:text-xs file:font-black file:uppercase file:tracking-[0.06em] file:text-black"
-                />
-              </label>
-              {recipeImage ? (
-                <p className="text-(--color-primary-text)/80 mt-2 text-xs font-semibold normal-case tracking-normal">
-                  Selected: {recipeImage.name}
-                </p>
-              ) : (
-                <p className="text-(--color-primary-text)/70 mt-2 text-xs font-semibold uppercase tracking-[0.04em]">
-                  Upload a screenshot or photo of a recipe page. Upload handling is not active yet.
-                </p>
-              )}
-            </div>
           ) : null}
 
           <label className="text-(--color-primary-text) block text-sm font-bold uppercase tracking-[0.05em]">
@@ -263,13 +260,11 @@ export default function GeneratePage() {
               value={generationInstructions}
               onChange={(e) => setGenerationInstructions(e.target.value)}
               rows={3}
-              disabled
-              placeholder='e.g. "Use Greek yogurt instead of sour cream" or "keep this vegan"'
-              className="mt-1 w-full cursor-not-allowed border-3 border-black bg-[#1a1a1a] px-3 py-2 text-sm font-semibold normal-case tracking-normal text-[#F5F5F5]/80 outline-none placeholder:text-[#F5F5F5]/35"
+              maxLength={PERSONAL_INSTRUCTIONS_MAX_CHARS}
+              placeholder='e.g. "Use Greek yogurt instead of sour cream" or "make this vegan"'
+              className="mt-1 w-full border-3 border-black bg-[#2B2B2B] px-3 py-2 text-sm font-semibold normal-case tracking-normal text-[#F5F5F5] outline-none placeholder:text-[#F5F5F5]/40 focus:border-(--color-accent)"
             />
-            <span className="mt-1 block text-xs font-semibold normal-case tracking-normal text-[#BDBDBD]">
-              Placeholder — server support coming soon. Your text is not sent with the request yet.
-            </span>
+            <CharacterCounter current={generationInstructions.length} max={PERSONAL_INSTRUCTIONS_MAX_CHARS} />
           </label>
 
         <div className="grid gap-3 sm:grid-cols-3">
@@ -306,13 +301,8 @@ export default function GeneratePage() {
         </div>
         <Button
           type="submit"
-          disabled={submitting || inputMode === "image"}
+          disabled={submitting}
           className="text-sm"
-          title={
-            inputMode === "image"
-              ? "Photo upload is coming soon — use a URL or pasted text."
-              : undefined
-          }
         >
           {submitting ? "Generating..." : "Generate"}
         </Button>

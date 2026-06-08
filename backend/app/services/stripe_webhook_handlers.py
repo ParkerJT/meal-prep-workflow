@@ -27,7 +27,7 @@ def handle_stripe_event(event: Any, db: Any, settings: Settings) -> None:
 
     if et == "checkout.session.completed":
         _handle_checkout_session_completed(data_object, db, settings)
-    elif et == "customer.subscription.updated":
+    elif et in ("customer.subscription.created", "customer.subscription.updated"):
         _handle_subscription_updated(data_object, db, settings)
     elif et == "customer.subscription.deleted":
         _handle_subscription_deleted(data_object, db, settings)
@@ -141,7 +141,7 @@ def _handle_subscription_deleted(sub: Any, db: Any, settings: Settings) -> None:
         )
         return
 
-    apply_subscription_deleted(db, uid, customer_id)
+    apply_subscription_deleted(db, uid, customer_id, settings)
 
 
 def _handle_invoice_payment_failed(invoice: Any, db: Any, settings: Settings) -> None:

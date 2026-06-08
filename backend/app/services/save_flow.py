@@ -7,7 +7,7 @@ from typing import Any, Literal
 from app.services.agents.models import ConvertedRecipe, OriginalRecipe, SavedRecipe
 from app.services.firestore import saved_recipes as saved_svc
 from app.services.firestore.timestamps import utc_now
-from app.services.recipe_id import normalize_source_url
+from app.services.recipe_id import normalize_source_key, normalize_source_url
 
 
 def infer_source_type(url: str) -> Literal["web", "youtube"]:
@@ -28,7 +28,14 @@ def save_from_workflow(
     notes: str = "",
 ) -> tuple[str, SavedRecipe]:
     """Create a user-owned saved_recipes row with embedded recipe snapshots."""
-    normalized = normalize_source_url(source_url) if source_url else None
+    if source_url:
+        normalized = (
+            normalize_source_key(source_url)
+            if source_type == "text"
+            else normalize_source_url(source_url)
+        )
+    else:
+        normalized = None
     sr = SavedRecipe(
         saved_at=utc_now(),
         notes=notes,

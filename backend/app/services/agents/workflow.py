@@ -12,13 +12,13 @@ Any step may set state.rejection to short-circuit remaining work at invoke time.
 from __future__ import annotations
 
 from typing import Literal
+from uuid import uuid4
 
 from langgraph.graph import END, START, StateGraph
 
 from app.services.agents.conversion import convert_recipe
 from app.services.agents.errors import WorkflowRejection
 from app.services.agents.extraction import (
-    WEB_PAGE_TEXT_MAX_CHARS,
     extract_recipe_from_pasted_text,
     extract_recipe_from_web_page,
     extract_recipe_from_youtube_video,
@@ -35,6 +35,7 @@ from app.services.agents.validation import (
 )
 from app.services.agents.workflow_state import ExtractionRoute, WorkflowState
 from app.services.recipe_id import normalize_source_url
+from app.services.user_text import RECIPE_TEXT_MAX_CHARS
 
 _RAW_SNIPPET_MAX = 4_000
 
@@ -62,18 +63,18 @@ def resolve_input_node(state: WorkflowState) -> dict:
     user_request = state["user_request"]
     if user_request.input_mode == "text":
         text = user_request.recipe_text or ""
-        if not text.strip():
+        if not text:
             return _rejection("invalid_input", "Pasted recipe text is empty.")
-        if len(text) > WEB_PAGE_TEXT_MAX_CHARS:
+        if len(text) > RECIPE_TEXT_MAX_CHARS:
             return _rejection(
                 "invalid_input",
-                f"Pasted text exceeds the maximum length of {WEB_PAGE_TEXT_MAX_CHARS} characters.",
+                f"Pasted text exceeds the maximum length of {RECIPE_TEXT_MAX_CHARS} characters.",
             )
         return {
-            "source_url": None,
+            "source_url": f"text://{uuid4()}",
             "source_type": "text",
             "extraction_route": "text",
-            "raw_content": text.strip(),
+            "raw_content": text,
         }
 
     url = (user_request.recipe_url or "").strip()
@@ -185,6 +186,7 @@ def convert_recipe_llm_node(state: WorkflowState) -> dict:
             state["user_request"],
             state["openai_client"],
             source_url=state.get("source_url"),
+            global_instructions=state.get("global_instructions"),
         )
     except Exception as exc:
         return _rejection("conversion_failed", f"Recipe conversion failed: {exc}")
@@ -258,10 +260,15 @@ def _build_graph():
 _compiled_graph = _build_graph()
 
 
-def run_workflow(user_request: UserRequest) -> GenerateResponse:
+def run_workflow(
+    user_request: UserRequest,
+    *,
+    global_instructions: str | None = None,
+) -> GenerateResponse:
     initial_state: WorkflowState = {
         "user_request": user_request,
         "openai_client": get_openai_client(),
+        "global_instructions": global_instructions,
     }
     final = _compiled_graph.invoke(initial_state)
 

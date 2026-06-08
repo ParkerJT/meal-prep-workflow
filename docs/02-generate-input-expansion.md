@@ -1,8 +1,8 @@
 # Generate recipe — multi-input & personal instructions
 
-> **Where this fits:** Step **2** in [README.md](./README.md). Implement after [01 — LangGraph transition](./01-langgraph-transition.md) so branching (URL vs text vs image) and per-route model choice live in the graph. Cross-check the phased product plan in [03 — Build plan](./03-build-plan.md) (Phase 2.5) when you update behavior.
+> **Where this fits:** Step **2** in [README.md](./README.md). Implement after [01 — LangGraph transition](./01-langgraph-transition.md) so branching (URL vs text) and per-route model choice live in the graph. Cross-check the phased product plan in [03 — Build plan](./03-build-plan.md) (Phase 2.5) when you update behavior.
 
-Implementation guide for extending **Generate recipe** so users can supply a **URL**, **pasted text**, or an **image**; optional **per-generation personal instructions**; and optional **account-level global instructions** that apply to every generation unless superseded by the per-run field. Use this document as the checklist while changing backend, workflow, and frontend.
+Implementation guide for extending **Generate recipe** so users can supply a **URL** or **pasted text**; optional **per-generation personal instructions**; and optional **account-level global instructions** that apply to every generation unless superseded by the per-run field. Use this document as the checklist while changing backend, workflow, and frontend.
 
 **Related:** [`BUILD_PLAN.md`](./03-build-plan.md) (Phase 2.5 workflow), canonical `original_recipes` / user `saved_recipes`.
 
@@ -12,10 +12,10 @@ Implementation guide for extending **Generate recipe** so users can supply a **U
 
 | Feature | Description |
 |--------|-------------|
-| **Input modes** | Exactly one of: recipe URL (existing), pasted plain text, or uploaded image (screenshot/photo of a recipe). |
+| **Input modes** | Exactly one of: recipe URL (existing) or pasted plain text. |
 | **Personal instructions (per generation)** | Optional short text applied during conversion for **this run only**—e.g. swap one ingredient, tweak for tonight—**not** the same as library “save notes.” |
 | **Global instructions (account)** | Optional text stored on the user profile and **automatically included on every generate** (e.g. “I’m vegetarian—adapt all recipes accordingly”). Users avoid retyping standing preferences. |
-| **Caching** | **`original_recipes` read-through cache applies only to URL extractions.** Text and image inputs **never** use cache lookup or cross-request reuse; treat every run as a fresh extraction. |
+| **Caching** | **`original_recipes` read-through cache applies only to URL extractions.** Text inputs **never** use cache lookup or cross-request reuse; treat every run as a fresh extraction. |
 
 ---
 
@@ -26,16 +26,16 @@ Implementation guide for extending **Generate recipe** so users can supply a **U
 - Normalize URL → `recipe_id` → if `original_recipes/{recipe_id}` exists, return cached `OriginalRecipe` and **skip** fetch + extraction LLM.
 - On cache miss, extract, then `ensure_canonical_original_recipe(...)` (create on miss only).
 
-### 2.2 Pasted text & image (no cache reuse)
+### 2.2 Pasted text (no cache reuse)
 
-- **Do not** call `get_original_recipe` for deduplication; **always** run the text or vision extraction path.
+- **Do not** call `get_original_recipe` for deduplication; **always** run the text extraction path.
 - **Persistence after a successful generate:** You still need a stable **`source_url` (or agreed key)** so:
   - `ensure_canonical_original_recipe` can store the canonical original if you keep that pattern, and
   - `POST /api/users/me/saved-recipes/from-generate` can resolve `original_recipe_id` from the same key the generate run used (see [`saved_recipes.py`](../backend/app/routes/saved_recipes.py) `GeneratedSaveCreate` + 409 when canonical doc missing).
 
 **Recommended approach:**
 
-1. On each **text** or **image** generate, generate a **one-time synthetic identifier** (e.g. UUID) and form a stable pseudo-URL such as `text://{uuid}` or `image://{uuid}` (pick one scheme and document it).
+1. On each **text** generate, generate a **one-time synthetic identifier** (e.g. UUID) and form a stable pseudo-URL such as `text://{uuid}` (document this scheme).
 2. Use that value everywhere this flow needs `source_url`: `ensure_canonical_original_recipe`, `convert_recipe` metadata patching, and **return it in the generate response** so the client can send it back unchanged on **save**.
 3. Do **not** attempt to hash content for cache keys; duplicates are assumed rare.
 
@@ -87,23 +87,17 @@ Add authenticated endpoints (names illustrative):
 
 ## 4. API design (generate request & response)
 
-### 4.1 Two shapes to choose from (pick one in implementation)
+**Request:** JSON body to `POST /api/workflow/generate` (existing route).
 
-| Approach | Pros | Cons |
-|----------|------|------|
-| **A. Single multipart endpoint** | One route; image + fields in one request | Client must use `Form`/`multipart` for all modes or branch |
-| **B. Split routes** | JSON stays simple for URL + text; separate route for image upload | Two code paths to maintain |
+**Minimum fields:**
 
-**Minimum fields (conceptual):**
-
-- `input_mode`: `"url" | "text" | "image"`
+- `input_mode`: `"url" | "text"`
 - `recipe_url` (when `url`)
 - `recipe_text` (when `text`) — cap length (align with extraction limits, e.g. on the order of `WEB_PAGE_TEXT_MAX_CHARS` in [`extraction.py`](../backend/app/services/agents/extraction.py))
-- `image` file (when `image`) — max size, allowed MIME types (`image/jpeg`, `image/png`, `image/webp`, etc.)
 - `user_adjustments` — existing [`UserAdjustments`](../backend/app/services/agents/models.py)
 - `personal_instructions` (optional) — new; short max length (e.g. 500–1000 chars—tune to product)
 
-**Validation:** Exactly one of URL / text / image payload present; reject ambiguous combinations.
+**Validation:** Exactly one of URL or text payload present; reject ambiguous combinations.
 
 **Response:** Extend generate response to include at least:
 
@@ -126,15 +120,13 @@ This removes ambiguity for the client when mode ≠ URL.
 ### 5.2 Extraction — [`backend/app/services/agents/extraction.py`](../backend/app/services/agents/extraction.py)
 
 - **`recipe_extraction_workflow`**: Refactor so URL path keeps current behavior (cache **only** here for URLs).
-- Add **`extract_recipe_from_pasted_text(text, client)`** (or reuse `extract_recipe_from_web_page` with a system prompt tuned for “user pasted recipe text” if that is cleaner—same structured output `OriginalRecipe`).
-- Add **`extract_recipe_from_image(bytes | path, client)`** using a **vision-capable** model; structured output to `OriginalRecipe`. Define image preprocessing if needed (resize, max pixels) before API call.
-- New env var(s) if vision uses a different model than `OPENAI_MODEL` (optional but common).
+- **`extract_recipe_from_pasted_text(text, client)`** — implemented; reuses web extraction system prompt with pasted-text user prompt (same structured output `OriginalRecipe`).
 
 ### 5.3 Workflow — [`backend/app/services/agents/workflow.py`](../backend/app/services/agents/workflow.py)
 
 - Branch on input mode:
   - **URL:** `recipe_extraction_workflow(db, url)` (cache applies inside).
-  - **Text / image:** call new extraction helpers; **no** cache read; build synthetic `source_url`; then `ensure_canonical_original_recipe` with that key (still “create on miss”; first write wins per UUID).
+  - **Text:** call `extract_recipe_from_pasted_text`; **no** cache read; build synthetic `source_url`; then `ensure_canonical_original_recipe` with that key (still “create on miss”; first write wins per UUID).
 - Pass full `UserRequest` into `convert_recipe`.
 
 ### 5.4 Conversion — [`backend/app/services/agents/conversion.py`](../backend/app/services/agents/conversion.py)
@@ -145,11 +137,11 @@ This removes ambiguity for the client when mode ≠ URL.
   - Honor substitutions/preferences **without** breaking food-safety sanity.
   - Still scale servings and aim for macro targets.
   - Reflect what it did in `conversion_metadata.conversion_notes`.
-- Keep setting `original_recipe_url` from the authoritative `source_url` on the request (for URL it stays a real URL; for others it is the synthetic key).
+- Keep setting `original_recipe_url` from the authoritative `source_url` on the request (for URL it stays a real URL; for text it is the synthetic key).
 
 ### 5.5 Routes — [`backend/app/routes/workflow.py`](../backend/app/routes/workflow.py)
 
-- Accept new body shape and/or multipart.
+- Accept JSON body (existing contract).
 - Subscription gate unchanged (`require_subscription`).
 - Inject uid; load **global instructions** for generate (see §3).
 - Return extended response (see §4).
@@ -167,13 +159,11 @@ This removes ambiguity for the client when mode ≠ URL.
 
 ## 6. Frontend — [`frontend/src/app/generate/page.tsx`](../frontend/src/app/generate/page.tsx)
 
-- UI to choose **one** input mode (tabs, radio group, or segmented control).
-- Fields: URL input | textarea | file input + preview.
+- UI to choose **one** input mode (segmented control: Recipe URL | Pasted text).
+- Fields: URL input or textarea.
 - **Personal instructions:** short textarea or input with character hint/max.
-- Submit:
-  - URL + text: JSON `fetch` (or `FormData` if unified endpoint).
-  - Image: `FormData` with file + adjustments + instructions.
-- Store **`source_url` from generate response** in state; use it for `from-generate` instead of `recipeUrl.trim()` when in text/image mode (and prefer server value for URL mode too for consistency).
+- Submit: JSON `fetch` with `input_mode`, `recipe_url` or `recipe_text`, and `user_adjustments`.
+- Store **`source_url` from generate response** in state; use it for `from-generate` instead of `recipeUrl.trim()` when in text mode (and prefer server value for URL mode too for consistency).
 - Copy/types: extend [`WorkflowRequest`](../frontend/src/app/generate/page.tsx) / shared types in [`frontend/src/lib/frontend-types.ts`](../frontend/src/lib/frontend-types.ts) if applicable.
 - **Global instructions UI:** implement per §3.5 (Settings or equivalent); not duplicated on generate beyond a short hint/link unless you want full preview.
 
@@ -184,11 +174,9 @@ This removes ambiguity for the client when mode ≠ URL.
 | Topic | Guidance |
 |-------|----------|
 | **Text length** | Cap pasted text; mirror or reuse web extraction truncation strategy. |
-| **Image size** | Max upload bytes; reject oversized before vision call; optional downscale. |
 | **Personal instructions** | Max length; strip or moderate if you add reporting later. |
 | **Global instructions** | Max length on PATCH; same abuse considerations as other user-stored prompt text. |
-| **Cost** | Vision calls are usually more expensive—log or metric per mode. |
-| **Abuse** | Rate limits already desirable for generate; multipart increases payload size—enforce limits at reverse proxy / FastAPI. |
+| **Abuse** | Rate limits already desirable for generate; enforce limits at reverse proxy / FastAPI. |
 
 ---
 
@@ -196,11 +184,10 @@ This removes ambiguity for the client when mode ≠ URL.
 
 - [ ] URL generate: cache hit skips extraction; miss extracts and persists.
 - [ ] Text generate: always extracts; never reads URL cache; save works using returned `source_url`.
-- [ ] Image generate: same as text for caching behavior; save works.
 - [ ] Personal instructions: swaps/reflection appear in converted recipe and/or `conversion_notes`.
 - [ ] Global instructions: persist via Settings API; load on generate; combine with per-run instructions per §3.1; conflict behavior matches prompt.
 - [ ] Clearing global instructions: generate behaves as if none were set.
-- [ ] Validation errors: zero inputs, multiple inputs, oversize text/image.
+- [ ] Validation errors: zero inputs, multiple inputs, oversize text.
 - [ ] Subscription 403 unchanged.
 
 ---
@@ -214,7 +201,7 @@ This removes ambiguity for the client when mode ≠ URL.
 
 ## 10. Summary
 
-1. **Three mutually exclusive inputs** + optional **per-generation personal instructions** + optional **account-level global instructions** (loaded server-side every time).  
-2. **Cache only for URLs**; text/image always extract fresh; use **synthetic `source_url` per run** for persistence and save alignment.  
-3. **Return `source_url` from generate** so **from-generate** stays consistent without hashing pasted content or images.  
+1. **Two mutually exclusive inputs** (URL or pasted text) + optional **per-generation personal instructions** + optional **account-level global instructions** (loaded server-side every time).
+2. **Cache only for URLs**; text always extracts fresh; use **synthetic `source_url` per run** for persistence and save alignment.
+3. **Return `source_url` from generate** so **from-generate** stays consistent without hashing pasted content.
 4. **GET/PATCH preferences** for global instructions; **merge + precedence** documented in the conversion prompt (§3.1).

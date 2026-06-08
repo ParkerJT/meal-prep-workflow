@@ -26,3 +26,8 @@ def test_extract_recipe_from_pasted_text_returns_parsed_recipe():
 
     assert out.title == "Soup"
     client.beta.chat.completions.parse.assert_called_once()
+    user_content = client.beta.chat.completions.parse.call_args.kwargs["messages"][1]["content"]
+    system_content = client.beta.chat.completions.parse.call_args.kwargs["messages"][0]["content"]
+    assert "<<<USER_RECIPE_TEXT>>>" in user_content
+    assert "Boil 2 cups water." in user_content
+    assert "untrusted" in system_content.lower()
